@@ -1,0 +1,22 @@
+show=drun
+prompt=Search…
+width=512
+location=center
+halign=fill
+valign=start
+
+# behavior
+allow_images=true
+image_size=20
+insensitive=true
+no_actions=true
+hide_scroll=true
+
+# layout
+columns=1
+lines=8
+dynamic_lines=true
+
+# spacing
+padding=10
+term=alacritty

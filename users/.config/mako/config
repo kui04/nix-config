@@ -1,0 +1,10 @@
+# color scheme [https://github.com/tinted-theming/schemes/blob/spec-0.11/base16/material-darker.yaml]
+font=sans 12
+width=300
+height=200
+# base01
+background-color=#303030FF
+# base0D 
+border-color=#82AAFFFF 
+border-radius=12
+border-size=1

@@ -1,0 +1,6 @@
+screenshots
+indicator
+indicator-radius=120
+indicator-thickness=15
+effect-blur=10x5
+effect-vignette=0.45:0.90

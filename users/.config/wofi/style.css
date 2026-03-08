@@ -1,0 +1,115 @@
+/* color scheme https://github.com/tinted-theming/schemes/blob/spec-0.11/base16/material-darker.yaml */
+/* font-size 14px */
+@define-color base00 #212121;
+@define-color base01 #303030;
+@define-color base02 #353535;
+@define-color base03 #4A4A4A;
+@define-color base04 #B2CCD6;
+@define-color base05 #EEFFFF;
+@define-color base06 #EEFFFF;
+@define-color base07 #FFFFFF;
+@define-color base08 #F07178;
+@define-color base09 #F78C6C;
+@define-color base0A #FFCB6B;
+@define-color base0B #C3E88D;
+@define-color base0C #89DDFF;
+@define-color base0D #82AAFF;
+@define-color base0E #C792EA;
+@define-color base0F #FF5370;
+
+* {
+    font-family: "Adwaita Sans", "Noto Sans", sans-serif;
+    font-size: 14px;
+}
+
+/* remove GTK overshoot/undershoot glow at scroll boundaries */
+undershoot,
+overshoot {
+    background: transparent;
+    box-shadow: none;
+}
+
+/* remove dotted focus border / focus ring on selected entry */
+#entry:focus,
+#entry:selected:focus,
+#entry:selected {
+    outline: none;
+    box-shadow: none;
+}
+
+/* IMPORTANT:
+   GTK3 + rounded corners + niri: make the surface slightly non-opaque */
+window {
+    /* use base00 but with alpha < 1 */
+    background-color: transparent;
+    border-radius: 12px;
+}
+
+/* keep inner container consistent with window alpha */
+#outer-box {
+    padding: 4px;
+    background-color: rgba(33, 33, 33, 0.99);
+    border: rgba(48, 48, 48, 0.99) 1px solid;
+    border-radius: 12px;
+}
+
+#input {
+    background-color: @base01;
+    color: @base05;
+
+    border: 1px solid @base02;
+    border-radius: 12px;
+
+    padding: 12px;
+    margin: 0px 0px 12px 0px;
+}
+
+#prompt {
+    margin: 0px 10px 0px 6px;
+    color: @base04;
+}
+
+#scroll {
+    background-color: transparent;
+}
+
+#entry {
+    background-color: transparent;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin: 2px 0px;
+    color: @base04;
+}
+
+#entry:selected {
+    background-color: @base02;
+    border: 1px dotted @base0D;
+}
+
+#entry image {
+    margin-right: 12px;
+    min-width: 20px;
+}
+
+#entry #text {
+    color: @base04;
+}
+
+#entry:selected #text {
+    color: @base05;
+}
+
+#entry #text match {
+    color: @base07;
+    font-weight: 600;
+}
+
+#message {
+    background-color: @base01;
+    border: 1px solid @base02;
+    border-radius: 12px;
+    padding: 12px 14px;
+    color: @base03;
+}
+

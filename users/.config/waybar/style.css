@@ -1,0 +1,279 @@
+/* color scheme https://github.com/tinted-theming/schemes/blob/spec-0.11/base16/material-darker.yaml */
+/* font-size 13px */
+@define-color base00 #212121;
+@define-color base01 #303030;
+@define-color base02 #353535;
+@define-color base03 #4A4A4A;
+@define-color base04 #B2CCD6;
+@define-color base05 #EEFFFF;
+@define-color base06 #EEFFFF;
+@define-color base07 #FFFFFF;
+@define-color base08 #F07178;
+@define-color base09 #F78C6C;
+@define-color base0A #FFCB6B;
+@define-color base0B #C3E88D;
+@define-color base0C #89DDFF;
+@define-color base0D #82AAFF;
+@define-color base0E #C792EA;
+@define-color base0F #FF5370;
+
+* {
+    border: none;
+    border-radius: 0;
+    font-family: "Adwaita Sans", "Noto Sans", sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    transition: color 0.3s ease;
+    font-feature-settings: "tnum";
+}
+
+window#waybar {
+    background: transparent;
+    color: @base05;
+}
+
+/* group 1 */
+#cpu,
+#memory,
+#temperature,
+#battery,
+#network,
+#power-profiles-daemon,
+/* group 2 */
+#pulseaudio,
+#backlight,
+#keyboard-state,
+/* group 3 */
+#tray,
+/* group 4 */
+#clock,
+#custom-power {
+    background: transparent;
+    color: @base05;
+    padding: 0px 6px;
+    margin-right: 6px;
+}
+
+/* min-width start --------------------------------------------------------- */
+#cpu #memory,
+#temperature,
+#battery,
+#backlight {
+    min-width: 2.5rem;
+}
+
+#power-profiles-daemon,
+#custom-power {
+    min-width: 1rem;
+}
+
+#pulseaudio {
+    min-width: 7rem;
+}
+
+/* min-width end ----------------------------------------------------------- */
+
+/* left start -------------------------------------------------------------- */
+.modules-left {
+    background: @base01;
+    padding: 0 8px;
+    border-radius: 12px;
+    margin: 3px 0 2px 3px;
+}
+
+#memory,
+#temperature,
+#battery,
+#network,
+#power-profiles-daemon {
+    background-image: linear-gradient(to bottom, @base03 0%, @base03 100%);
+    background-repeat: no-repeat;
+    background-position: left center;
+    background-size: 1px 20%;
+}
+
+#cpu {
+    color: @base04;
+}
+
+#memory {
+    color: @base0E;
+}
+
+#temperature {
+    color: @base08;
+    margin-right: 3px;
+}
+
+#battery.warning {
+    color: @base0A;
+}
+
+#battery.critical {
+    color: @base08;
+}
+
+#battery.charging {
+    color: @base0B;
+}
+
+#battery.plugged {
+    color: @base0B;
+}
+
+#power-profiles-daemon {
+    margin-right: 0;
+}
+
+#power-profiles-daemon.performance {
+    color: @base08;
+}
+
+#power-profiles-daemon.balanced {
+    color: @base0D;
+}
+
+#power-profiles-daemon.power-saver {
+    color: @base0B;
+}
+
+/* left end ---------------------------------------------------------------- */
+
+/* center start ------------------------------------------------------------ */
+.modules-center {
+    background: @base01;
+    padding: 4px 0;
+    border-radius: 12px;
+    margin: 3px 0 2px 0;
+}
+
+#workspaces button {
+    margin: 0 4px;
+    color: @base04;
+    background: transparent;
+    border-radius: 12px;
+    transition: none;
+}
+
+#workspaces button:hover {
+    background: @base02;
+    color: @base05;
+}
+
+#workspaces button.focused {
+    background: @base0D;
+    color: @base00;
+}
+
+#workspaces button.urgent {
+    background: @base08;
+    color: @base07;
+}
+
+/* center end -------------------------------------------------------------- */
+
+/* right start ------------------------------------------------------------- */
+.modules-right {
+    background: @base01;
+    padding: 0 8px;
+    border-radius: 12px;
+    margin: 3px 3px 2px 0;
+}
+
+#backlight,
+#keyboard-state,
+#tray,
+#clock,
+#custom-power {
+    background-image: linear-gradient(to bottom, @base03 0%, @base03 100%);
+    background-repeat: no-repeat;
+    background-position: left center;
+    background-size: 1px 20%;
+}
+
+#pulseaudio {
+    color: @base0C;
+    margin-right: 0;
+}
+
+#pulseaudio.muted {
+    color: @base03;
+}
+
+#backlight {
+    color: @base0A;
+}
+
+#tray {
+    margin-right: 0;
+}
+
+#clock {
+    margin-right: 0;
+    padding: 0 6px;
+}
+
+#custom-power {
+    margin-right: 0;
+}
+
+#custom-power:hover {
+    /* nixos dark icon color */
+    color: #7EBAE4;
+}
+
+/* right end --------------------------------------------------------------- */
+
+/* tooltip start ----------------------------------------------------------- */
+tooltip {
+    background: rgba(48, 48, 48, 0.99);
+    /* @base01 with alpha */
+    color: @base05;
+
+    border-radius: 12px;
+    border: 1px solid @base03;
+}
+
+tooltip label {
+    font-family: "Noto Sans", sans-serif;
+}
+
+/* tooltip end ------------------------------------------------------------- */
+
+/* menu start -------------------------------------------------------------- */
+menu,
+menuitem {
+    min-height: 0;
+}
+
+menu {
+    background: rgba(48, 48, 48, 0.99);
+    color: @base05;
+    border: 1px solid @base03;
+    border-radius: 12px;
+    padding: 8px;
+}
+
+decoration {
+    border: none;
+    border-radius: 12px;
+    box-shadow: none;
+    background: transparent;
+}
+
+menuitem {
+    margin: 2px 0;
+    border-radius: 8px;
+}
+
+menuitem label {
+    font-size: 13px;
+    padding: 4px 8px;
+    border-radius: 8px;
+}
+
+menuitem:hover {
+    background-color: rgba(53, 53, 53, 0.99);
+}
+
+/* menu end -------------------------------------------------------------- */
