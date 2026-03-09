@@ -67,7 +67,7 @@ in {
     nv = "nvidia-offload";
     nf = "nix flake new -t github:nix-community/nix-direnv";
     up = "sudo nixos-rebuild switch --flake ~/.nix-config#thinkbook";
-    ug = "sudo nix flake update --flake ~/.nix-config#thinkbook && flatpak --user update -y";
+    ug = "sudo nix flake update --flake ~/.nix-config && flatpak --user update -y";
     ut = "sudo nixos-rebuild test --flake ~/.nix-config#thinkbook";
     reboot-to-win = "systemctl reboot --boot-loader-entry=auto-windows";
     clean = "sudo nix-collect-garbage -d";
