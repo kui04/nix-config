@@ -67,5 +67,18 @@
         }
       ];
     };
+
+    homeConfigurations.fkgfw = home-manager.lib.homeManagerConfiguration {
+      pkgs = inputs.nixpkgs.legacyPackages.x86_64-linux;
+      extraSpecialArgs = {
+        username = "fkgfw";
+        agenix = inputs.agenix;
+      };
+      modules = [
+        ./users/fkgfw
+
+        inputs.agenix.homeManagerModules.default
+      ];
+    };
   };
 }
