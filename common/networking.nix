@@ -26,7 +26,7 @@
     # clash-verge-rev
     programs.clash-verge.package = pkgs.clash-verge-rev;
     programs.clash-verge.enable = true;
-    programs.clash-verge.autoStart = false;
+    programs.clash-verge.autoStart = true;
     programs.clash-verge.serviceMode = true;
     # networking.proxy.allProxy = "http://127.0.0.1:7897";
 
