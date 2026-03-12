@@ -1,0 +1,105 @@
+# A template for mihomo client config
+# The actual config is stored in secrets/mihomo.age
+mixed-port: 7890
+allow-lan: true
+bind-address: "*"
+mode: rule
+log-level: info
+ipv6: true
+
+geodata-mode: true
+
+geox-url: 
+  geoip:  "https://cdn.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/geoip.dat"
+  geosite: "https://cdn.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/geosite.dat"
+  mmdb: "https://cdn.jsdelivr.net/gh/Loyalsoldier/geoip@release/Country.mmdb"
+
+geo-auto-update: true
+geo-update-interval: 24
+
+global-client-fingerprint: chrome
+find-process-mode: strict
+
+profile:
+  store-selected: true
+  store-fake-ip: true
+
+dns:
+  enable: true
+  listen: 0.0.0.0:1053
+  ipv6: true
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter: 
+    - "*.lan"
+    - "*.local"
+    - "*.localhost"
+    - "*.test"
+    - localhost.ptlogin2.qq.com
+    - "+.msftconnecttest.com"
+  default-nameserver: 
+    - 223.5.5.5
+    - 119.29.29.29
+  nameserver: 
+    - https://doh.pub/dns-query
+    - https://dns.alidns.com/dns-query
+  nameserver-policy:
+    "geosite:cn,private": 
+      - https://doh.pub/dns-query
+      - https://dns.alidns.com/dns-query
+
+proxies:
+  - name: "hysteria2"
+    type: hysteria2
+    server: SERVER_IP_OR_DOMAIN
+    port: 443
+    ports: 20000-50000
+    password: "HY2_PASSWORD"
+    sni: www.bing.com
+    skip-cert-verify: false
+    fingerprint: FINGERPRINT
+    fast-open: true
+
+  - name: "vless-reality-vision"
+    type: vless
+    server: SERVER_IP_OR_DOMAIN
+    port: 443
+    uuid: "VLESS_UUID"
+    network: tcp
+    udp: true
+    tls: true
+    flow: xtls-rprx-vision
+    servername: www.bing.com
+    client-fingerprint: chrome
+    packet-encoding: xudp
+    skip-cert-verify: true
+    reality-opts:
+      public-key: "VLESS_PUBLIC_KEY"
+      short-id: ""
+
+proxy-groups:
+  - name: "Proxy"
+    type: select
+    proxies:
+      - vless-reality-vision
+      - hysteria2
+      - DIRECT
+
+rules:
+  # 广告屏蔽
+  - GEOSITE,category-ads-all,REJECT
+ 
+  # 私有网络直连
+  - GEOIP,private,DIRECT,no-resolve
+  
+  # 中国大陆 IP 直连
+  - GEOIP,cn,DIRECT,no-resolve
+  
+  # 中国大陆域名直连
+  - GEOSITE,cn,DIRECT
+  
+  # 非中国域名走代理（包含 GFW、Google 等）
+  - GEOSITE,geolocation-!cn,Proxy
+  
+  # 兜底规则
+  - MATCH,Proxy

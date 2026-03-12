@@ -1,0 +1,43 @@
+# A template for hysteria server config
+# The actual config is stored in secrets/hysteria/*.age
+listen: :443
+
+tls:
+  cert: /root/.config/hysteria/server.crt
+  key: /root/.config/hysteria/server.key
+  sniGuard: disable
+
+auth:
+  type: password
+  password: HY2_PASSWORD
+
+masquerade:
+  type: proxy
+  proxy:
+    url: https://www.bing.com/
+    rewriteHost: true
+
+quic:
+  initStreamReceiveWindow: 8388608 
+  maxStreamReceiveWindow: 8388608 
+  initConnReceiveWindow: 20971520 
+  maxConnReceiveWindow: 20971520 
+  maxIdleTimeout: 30s 
+  maxIncomingStreams: 1024 
+  disablePathMTUDiscovery: false 
+
+bandwidth:
+  up: 1 gbps
+  down: 1 gbps
+
+ignoreClientBandwidth: false
+disableUDP: false
+udpIdleTimeout: 60s
+speedTest: false
+
+sniff:
+  enable: true
+  timeout: 2s
+  rewriteDomain: false
+  tcpPorts: 80,443,20000-50000
+  udpPorts: all

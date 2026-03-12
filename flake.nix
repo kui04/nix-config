@@ -6,7 +6,7 @@
     # unstable packages
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
-    # home-manager, used for managing user configuration
+    # home-manager
     home-manager.url = "github:nix-community/home-manager/release-25.11";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
 
@@ -67,13 +67,17 @@
         }
       ];
     };
-
+    # this is actually a root user configuration for the vps, but I don't want to name it "root" to avoid confusion
     homeConfigurations.fkgfw = home-manager.lib.homeManagerConfiguration {
       pkgs = inputs.nixpkgs.legacyPackages.x86_64-linux;
+
       extraSpecialArgs = {
-        username = "fkgfw";
+        username = "root";
+        homeDirectory = "/root";
+        flakeRootPath = ./.;
         agenix = inputs.agenix;
       };
+
       modules = [
         ./users/fkgfw
 
