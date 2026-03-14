@@ -4,9 +4,14 @@
   config,
   flakeRootPath,
   ...
-}: let
+}:
+let
   homeDirectory = config.home.homeDirectory;
-in {
+  iptables = "${pkgs.iptables}/bin/iptables";
+  ip6tables = "${pkgs.iptables}/bin/ip6tables";
+  systemctl = "${pkgs.systemd}/bin/systemctl";
+in
+{
   home = {
     packages = with pkgs; [
       hysteria
@@ -51,12 +56,21 @@ in {
     WantedBy=multi-user.target
   '';
 
-  home.activation.installHysteriaService = lib.hm.dag.entryAfter ["decryptAgenix"] ''
-    $DRY_RUN_CMD install -Dm644 ${
+  home.activation.installHysteriaService = lib.hm.dag.entryAfter [ "decryptAgenix" ] ''
+    $DRY_RUN_CMD ${pkgs.coreutils}/bin/install -Dm644 ${
       config.home.file.".config/systemd-services/hysteria.service".source
     } /etc/systemd/system/hysteria.service
-    $DRY_RUN_CMD /bin/systemctl daemon-reload
-    $DRY_RUN_CMD /bin/systemctl enable --now hysteria.service
-    $DRY_RUN_CMD /bin/systemctl restart hysteria.service
+
+    $DRY_RUN_CMD ${systemctl} daemon-reload
+    $DRY_RUN_CMD ${systemctl} enable hysteria.service
+    $DRY_RUN_CMD ${systemctl} restart hysteria.service
+  '';
+
+  home.activation.portHopping = lib.hm.dag.entryAfter [ "installHysteriaService" ] ''
+    ${iptables} -t nat -C PREROUTING -i enp1s0 -p udp --dport 20000:50000 -j REDIRECT --to-ports 443 2>/dev/null \
+      || ${iptables} -t nat -A PREROUTING -i enp1s0 -p udp --dport 20000:50000 -j REDIRECT --to-ports 443
+
+    ${ip6tables} -t nat -C PREROUTING -i enp1s0 -p udp --dport 20000:50000 -j REDIRECT --to-ports 443 2>/dev/null \
+      || ${ip6tables} -t nat -A PREROUTING -i enp1s0 -p udp --dport 20000:50000 -j REDIRECT --to-ports 443
   '';
 }

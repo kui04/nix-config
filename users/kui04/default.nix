@@ -31,6 +31,7 @@ in {
       # from unstable
       unstable.hmcl
       unstable.vscode
+      unstable.zed-editor
       unstable.antigravity
       unstable.opencode
     ];
@@ -46,6 +47,7 @@ in {
     "com.google.AndroidStudio"
     "com.google.Chrome"
     "com.usebottles.bottles"
+    "com.github.wwmm.easyeffects"
     "md.obsidian.Obsidian"
     "io.dbeaver.DBeaverCommunity"
     "io.github.giantpinkrobots.flatsweep"
@@ -56,9 +58,9 @@ in {
     "org.mozilla.firefox"
     "org.qbittorrent.qBittorrent"
     "org.gnome.font-viewer"
+    "org.libreoffice.LibreOffice"
     "net.codelogistics.clicker"
     "net.agalwood.Motrix"
-    "org.libreoffice.LibreOffice"
   ];
 
   # bash shell
