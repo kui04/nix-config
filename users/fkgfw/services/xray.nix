@@ -4,12 +4,10 @@
   config,
   flakeRootPath,
   ...
-}:
-let
+}: let
   homeDirectory = config.home.homeDirectory;
   systemctl = "${pkgs.systemd}/bin/systemctl";
-in
-{
+in {
   home = {
     packages = with pkgs; [
       xray
@@ -47,7 +45,7 @@ in
     WantedBy=multi-user.target
   '';
 
-  home.activation.installXrayService = lib.hm.dag.entryAfter [ "decryptAgenix" ] ''
+  home.activation.installXrayService = lib.hm.dag.entryAfter ["decryptAgenix"] ''
     $DRY_RUN_CMD ${pkgs.coreutils}/bin/install -Dm644 ${
       config.home.file.".config/systemd-services/xray.service".source
     } /etc/systemd/system/xray.service

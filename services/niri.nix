@@ -9,7 +9,7 @@
   programs.niri.useNautilus = true;
   programs.nautilus-open-any-terminal = {
     enable = true;
-    terminal = "alacritty";
+    terminal = "ghostty";
   };
   # nautilus trash and mounts backend
   services.gvfs.enable = true;
@@ -31,7 +31,7 @@
     ntfs3g
     nautilus
     file-roller # gnome archive manager
-    alacritty
+    ghostty
   ];
 
   # hint Electron apps to use Wayland

@@ -64,7 +64,9 @@ in {
   ];
 
   # bash shell
+  programs.fastfetch.enable = true;
   programs.bash.enable = true;
+  programs.bash.initExtra ="fastfetch -l linux";
   programs.bash.shellAliases = {
     nv = "nvidia-offload";
     nf = "nix flake new -t github:nix-community/nix-direnv";

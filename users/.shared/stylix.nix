@@ -22,4 +22,11 @@
       monospace.name = "AdwaitaMono Nerd Font";
     };
   };
+
+  xdg.configFile."ghostty/".source = ../.config/ghostty;
+  xdg.configFile."swaylock/".source = ../.config/swaylock;
+  xdg.configFile."swayidle/".source = ../.config/swayidle;
+  xdg.configFile."waybar/".source = ../.config/waybar;
+  xdg.configFile."wofi/".source = ../.config/wofi;
+  xdg.configFile."mako/".source = ../.config/mako;
 }

@@ -1,0 +1,50 @@
+background = #212121
+foreground = #EEFFFF
+
+cursor-color = #EEFFFF
+cursor-text   = #212121
+
+selection-background = #353535
+selection-foreground = #EEFFFF
+
+window-theme = ghostty
+window-titlebar-background = #212121
+window-titlebar-foreground = #EEFFFF
+
+macos-titlebar-style = transparent
+
+font-family = monospace
+# base01
+palette = 0=#303030
+# base08
+palette = 1=#F07178
+# base0B
+palette = 2=#C3E88D
+# base0A
+palette = 3=#FFCB6B
+# base0D
+palette = 4=#82AAFF
+# base0E
+palette = 5=#C792EA
+# base0C
+palette = 6=#89DDFF
+# base05
+palette = 7=#EEFFFF
+# base03
+palette = 8=#4A4A4A    
+# base09 
+palette = 9=#F78C6C    
+# base0B 
+palette = 10=#C3E88D   
+# base0A 
+palette = 11=#FFCB6B   
+# base0D 
+palette = 12=#82AAFF   
+# base0E 
+palette = 13=#C792EA   
+# base0C 
+palette = 14=#89DDFF   
+# base07 
+palette = 15=#FFFFFF   
+ 
+# palette-generate = false
