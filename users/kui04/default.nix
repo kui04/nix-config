@@ -46,7 +46,6 @@ in {
     "com.valvesoftware.Steam"
     "com.google.AndroidStudio"
     "com.google.Chrome"
-    "com.usebottles.bottles"
     "com.github.wwmm.easyeffects"
     "md.obsidian.Obsidian"
     "io.dbeaver.DBeaverCommunity"
@@ -61,6 +60,7 @@ in {
     "org.libreoffice.LibreOffice"
     "net.codelogistics.clicker"
     "net.agalwood.Motrix"
+    "net.lutris.Lutris"
   ];
 
   # bash shell
