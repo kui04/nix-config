@@ -23,6 +23,8 @@
 
     fonts.packages = with pkgs; [
       adwaita-fonts
+      nerd-fonts.fira-code
+      nerd-fonts.zed-mono
       nerd-fonts.adwaita-mono
       nerd-fonts.iosevka
       noto-fonts

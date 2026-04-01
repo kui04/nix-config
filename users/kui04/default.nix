@@ -82,6 +82,11 @@ in {
   programs.git.settings.user.name = "kui04";
   programs.git.settings.user.email = "likuiandmc2004@gmail.com";
 
+  # jj-vcs
+  programs.jujutsu.enable = true;
+  programs.jujutsu.settings.user.name = "kui04";
+  programs.jujutsu.settings.user.email = "likuiandmc2004@gmail.com";
+
   # direnv
   programs.direnv.enable = true;
   programs.direnv.enableBashIntegration = true;
