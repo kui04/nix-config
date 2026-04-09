@@ -30,6 +30,7 @@ in {
       ffmpeg-full
       # from unstable
       unstable.hmcl
+      unstable.zellij
       unstable.vscode
       unstable.zed-editor
       unstable.antigravity
@@ -76,6 +77,10 @@ in {
     reboot-to-win = "systemctl reboot --boot-loader-entry=auto-windows";
     clean = "sudo nix-collect-garbage -d";
   };
+
+  # starship
+  programs.starship.enable = true;
+  programs.starship.enableBashIntegration = true;
 
   # git config
   programs.git.enable = true;
