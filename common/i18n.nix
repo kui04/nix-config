@@ -27,6 +27,8 @@
       nerd-fonts.zed-mono
       nerd-fonts.adwaita-mono
       nerd-fonts.iosevka
+      nerd-fonts.iosevka-term
+      nerd-fonts.sauce-code-pro
       noto-fonts
       noto-fonts-cjk-sans
       noto-fonts-cjk-serif

@@ -67,12 +67,12 @@ in {
   # bash shell
   programs.fastfetch.enable = true;
   programs.bash.enable = true;
-  programs.bash.initExtra ="fastfetch -l linux";
+  programs.bash.initExtra = "fastfetch -l windows";
   programs.bash.shellAliases = {
     nv = "nvidia-offload";
     nf = "nix flake new -t github:nix-community/nix-direnv";
-    up = "sudo nixos-rebuild switch --flake ~/.nix-config#thinkbook";
-    ug = "sudo nix flake update --flake ~/.nix-config && flatpak --user update -y";
+    ug = "sudo nixos-rebuild switch --flake ~/.nix-config#thinkbook && flatpak --user update -y";
+    up = "sudo nix flake update --flake ~/.nix-config";
     ut = "sudo nixos-rebuild test --flake ~/.nix-config#thinkbook";
     reboot-to-win = "systemctl reboot --boot-loader-entry=auto-windows";
     clean = "sudo nix-collect-garbage -d";
@@ -81,6 +81,7 @@ in {
   # starship
   programs.starship.enable = true;
   programs.starship.enableBashIntegration = true;
+  programs.starship.settings = builtins.fromTOML (builtins.readFile ../.config/starship.toml);
 
   # git config
   programs.git.enable = true;
