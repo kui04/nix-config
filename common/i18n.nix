@@ -29,6 +29,7 @@
       nerd-fonts.iosevka
       nerd-fonts.iosevka-term
       nerd-fonts.sauce-code-pro
+      nerd-fonts.geist-mono
       noto-fonts
       noto-fonts-cjk-sans
       noto-fonts-cjk-serif

@@ -48,10 +48,10 @@ in {
     "com.google.AndroidStudio"
     "com.google.Chrome"
     "com.github.wwmm.easyeffects"
+    "com.github.gmg137.netease-cloud-music-gtk"
     "md.obsidian.Obsidian"
     "io.dbeaver.DBeaverCommunity"
     "io.github.giantpinkrobots.flatsweep"
-    "io.github.qier222.YesPlayMusic"
     "org.kde.okular"
     "org.localsend.localsend_app"
     "org.telegram.desktop"
@@ -71,7 +71,7 @@ in {
   programs.bash.shellAliases = {
     nv = "nvidia-offload";
     nf = "nix flake new -t github:nix-community/nix-direnv";
-    ug = "sudo nixos-rebuild switch --flake ~/.nix-config#thinkbook && flatpak --user update -y";
+    ug = "sudo nixos-rebuild switch --flake ~/.nix-config#thinkbook";
     up = "sudo nix flake update --flake ~/.nix-config";
     ut = "sudo nixos-rebuild test --flake ~/.nix-config#thinkbook";
     reboot-to-win = "systemctl reboot --boot-loader-entry=auto-windows";

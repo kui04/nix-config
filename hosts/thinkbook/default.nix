@@ -39,6 +39,7 @@
     inputs.chinese-fonts.overlays.default
     (import ../../overlays/hmcl.nix)
     (import ../../overlays/pkgs-unstable.nix {inherit inputs;})
+    (import ../../overlays/opencode.nix {inherit inputs;})
   ];
 
   # list packages installed in system profile
