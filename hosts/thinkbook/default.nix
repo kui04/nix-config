@@ -3,7 +3,8 @@
   pkgs,
   username,
   ...
-}: {
+}:
+{
   imports = [
     # include the results of the hardware scan
     ./hardware.nix
@@ -39,24 +40,25 @@
   nixpkgs.overlays = [
     inputs.chinese-fonts.overlays.default
     (import ../../overlays/hmcl.nix)
-    (import ../../overlays/pkgs-unstable.nix {inherit inputs;})
-    (import ../../overlays/opencode.nix {inherit inputs;})
+    (import ../../overlays/pkgs-unstable.nix { inherit inputs; })
+    (import ../../overlays/opencode.nix { inherit inputs; })
   ];
 
   # list packages installed in system profile
   environment.systemPackages = with pkgs; [
-    nil
-    neovim
-    wget
-    git
+    alejandra
     cachix
-    unzip
-    zip
     fd
     file
-    tree
-    alejandra
+    git
     inputs.agenix.packages.${stdenv.hostPlatform.system}.default
+    neovim
+    nil
+    pciutils
+    tree
+    unzip
+    wget
+    zip
   ];
 
   # adb
@@ -93,12 +95,12 @@
     {
       device = "/var/lib/swapfile";
       size = 16 * 1024; # 16 GB
-      options = ["discard"]; # equivalent to swapon --discard
+      options = [ "discard" ]; # equivalent to swapon --discard
     }
   ];
   # this is needed for zswap lz4 algorithm
   boot.initrd.systemd.enable = true;
-  boot.initrd.kernelModules = ["lz4"];
+  boot.initrd.kernelModules = [ "lz4" ];
   boot.kernelParams = [
     "zswap.enabled=1" # enables zswap
     "zswap.compressor=lz4" # compression algorithm
@@ -121,6 +123,8 @@
   ];
   environment.sessionVariables = {
     LIBVA_DRIVER_NAME = "iHD"; # Prefer the modern iHD backend
+    # Force GTK to use the GL renderer, and related issue: https://gitlab.freedesktop.org/mesa/mesa/-/work_items/13319
+    GSK_RENDERER = "gl";
   };
   services.xserver.videoDrivers = [
     "modesetting"

@@ -2,9 +2,11 @@
   pkgs,
   username,
   ...
-}: let
+}:
+let
   homeDirectory = "/home/${username}";
-in {
+in
+{
   imports = [
     ../.shared/flatpak.nix
     ../.shared/fcitx5.nix
@@ -39,29 +41,29 @@ in {
   };
 
   services.flatpak.packages = [
-    "com.qq.QQ"
-    "com.tencent.WeChat"
     "com.getpostman.Postman"
+    "com.github.gmg137.netease-cloud-music-gtk"
     "com.github.tchx84.Flatseal"
-    "com.moonlight_stream.Moonlight"
-    "com.valvesoftware.Steam"
+    "com.github.wwmm.easyeffects"
     "com.google.AndroidStudio"
     "com.google.Chrome"
-    "com.github.wwmm.easyeffects"
-    "com.github.gmg137.netease-cloud-music-gtk"
-    "md.obsidian.Obsidian"
+    "com.moonlight_stream.Moonlight"
+    "com.qq.QQ"
+    "com.tencent.WeChat"
+    "com.valvesoftware.Steam"
     "io.dbeaver.DBeaverCommunity"
     "io.github.giantpinkrobots.flatsweep"
+    "md.obsidian.Obsidian"
+    "net.agalwood.Motrix"
+    "net.codelogistics.clicker"
+    "net.lutris.Lutris"
+    "org.gnome.font-viewer"
     "org.kde.okular"
+    "org.libreoffice.LibreOffice"
     "org.localsend.localsend_app"
-    "org.telegram.desktop"
     "org.mozilla.firefox"
     "org.qbittorrent.qBittorrent"
-    "org.gnome.font-viewer"
-    "org.libreoffice.LibreOffice"
-    "net.codelogistics.clicker"
-    "net.agalwood.Motrix"
-    "net.lutris.Lutris"
+    "org.telegram.desktop"
   ];
 
   # bash shell
