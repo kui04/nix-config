@@ -14,6 +14,7 @@
     ../../common/audio.nix
 
     # services
+    ../../services/xdg-portal.nix
     ../../services/flatpak.nix
     ../../services/gdm.nix
     ../../services/niri.nix

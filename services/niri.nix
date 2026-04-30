@@ -36,16 +36,4 @@
 
   # hint Electron apps to use Wayland
   environment.sessionVariables.NIXOS_OZONE_WL = "1";
-
-  # xdg portals for niri
-  xdg.portal = {
-    enable = true;
-    xdgOpenUsePortal = true;
-    extraPortals = with pkgs; [
-      xdg-desktop-portal-gtk
-      # recommended by upstream, required for screencast support
-      # https://github.com/YaLTeR/niri/wiki/Important-Software#portals
-      xdg-desktop-portal-gnome
-    ];
-  };
 }
