@@ -13,7 +13,7 @@ window-titlebar-foreground = #EEFFFF
 
 macos-titlebar-style = transparent
 
-font-family = monospace
+font-family = Maple Mono NF CN
 # base01
 palette = 0=#303030
 # base08
