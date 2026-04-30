@@ -1,3 +1,5 @@
+env=GSK_RENDERER=gl
+
 background = #212121
 foreground = #EEFFFF
 

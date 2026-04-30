@@ -25,13 +25,14 @@
   security.polkit.enable = true;
 
   environment.systemPackages = with pkgs; [
-    xwayland-satellite
-    gparted # partition editor
     exfatprogs
-    ntfs3g
-    nautilus
     file-roller # gnome archive manager
-    ghostty
+    ghostty # terminal emulator
+    gnome-system-monitor
+    gparted # partition editor
+    nautilus
+    ntfs3g
+    xwayland-satellite
   ];
 
   # hint Electron apps to use Wayland

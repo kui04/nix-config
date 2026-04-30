@@ -17,8 +17,8 @@
       gnome-maps
       gnome-weather
     ];
-    # only add udev package when GNOME is enabled (systray icons, etc.)
 
+    # only add udev package when GNOME is enabled (systray icons, etc.)
     services.udev.packages = with pkgs; [gnome-settings-daemon];
     # this is conflicted with services.gnome.gcr-ssh-agent.enable
     programs.ssh.startAgent = false;

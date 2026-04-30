@@ -2,11 +2,9 @@
   pkgs,
   username,
   ...
-}:
-let
+}: let
   homeDirectory = "/home/${username}";
-in
-{
+in {
   imports = [
     ../.shared/flatpak.nix
     ../.shared/fcitx5.nix

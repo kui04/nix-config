@@ -3,8 +3,7 @@
   pkgs,
   username,
   ...
-}:
-{
+}: {
   imports = [
     # include the results of the hardware scan
     ./hardware.nix
@@ -40,8 +39,8 @@
   nixpkgs.overlays = [
     inputs.chinese-fonts.overlays.default
     (import ../../overlays/hmcl.nix)
-    (import ../../overlays/pkgs-unstable.nix { inherit inputs; })
-    (import ../../overlays/opencode.nix { inherit inputs; })
+    (import ../../overlays/pkgs-unstable.nix {inherit inputs;})
+    (import ../../overlays/opencode.nix {inherit inputs;})
   ];
 
   # list packages installed in system profile
@@ -95,12 +94,12 @@
     {
       device = "/var/lib/swapfile";
       size = 16 * 1024; # 16 GB
-      options = [ "discard" ]; # equivalent to swapon --discard
+      options = ["discard"]; # equivalent to swapon --discard
     }
   ];
   # this is needed for zswap lz4 algorithm
   boot.initrd.systemd.enable = true;
-  boot.initrd.kernelModules = [ "lz4" ];
+  boot.initrd.kernelModules = ["lz4"];
   boot.kernelParams = [
     "zswap.enabled=1" # enables zswap
     "zswap.compressor=lz4" # compression algorithm
