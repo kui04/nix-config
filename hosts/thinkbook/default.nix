@@ -151,7 +151,7 @@
   # enable the OpenSSH daemon.
   services.openssh.enable = true;
 
-  # create_ap service tuned for 80 MHz 5 GHz operation
+  # create_ap service tuned for Wi-Fi 6 HE40 2.4 GHz operation
   services.create_ap = {
     enable = true;
     settings = {
@@ -161,25 +161,17 @@
       PASSPHRASE = "asdfghjkl";
       SHARE_METHOD = "nat";
       GATEWAY = "192.168.12.1";
-
-      # Force a clean 80 MHz chunk on the high-power UNII-3 range.
-      FREQ_BAND = "5";
-      CHANNEL = "149";
+      FREQ_BAND = "2.4";
+      CHANNEL = "6";
       COUNTRY = "CN";
-
       WPA_VERSION = "3";
       DRIVER = "nl80211";
-
-      # Enable every PHY mode the NIC supports to squeeze out peak throughput.
       IEEE80211N = "1";
-      IEEE80211AC = "1";
+      IEEE80211AC = "0";
       IEEE80211AX = "1";
 
-      # Prefer 40 MHz HT with SGI and STBC so legacy HT clients stay fast.
-      HT_CAPAB = "[HT40+][SHORT-GI-40][TX-STBC][RX-STBC1]";
-
-      # Unlock 80 MHz VHT goodies, incl. beamforming for better range.
-      VHT_CAPAB = "[MAX-MPDU-11454][SHORT-GI-80][TX-STBC][RX-STBC-1][SU-BEAMFORMEE][MU-BEAMFORMEE]";
+      # HT40-, LDPC, dual-GI, STBC for best throughput @ 2.4 GHz
+      HT_CAPAB = "[HT40-][LDPC][SHORT-GI-20][SHORT-GI-40][TX-STBC][RX-STBC1]";
     };
   };
 
