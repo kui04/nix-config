@@ -5,17 +5,17 @@
     overlays = [
       (finalUnstable: prevUnstable: {
         opencode = prevUnstable.opencode.overrideAttrs (old: rec {
-          version = "1.14.25";
+          version = "1.14.31";
 
           src = prevUnstable.fetchFromGitHub {
             owner = "anomalico";
             repo = "opencode";
             tag = "v${version}";
-            hash = "sha256-v1aaq4HWAJ5wZm9bUeaRkyKr0iYjdOhigr/I31wwhEk=";
+            hash = "sha256-VHznPS2OuJ8urQqGK3K0ysQLCk+O8JV7/UCDdFyqafQ=";
           };
 
           node_modules = old.node_modules.overrideAttrs (_: {
-            outputHash = "sha256-r0UCWhxIB4q4Te+LpXNcfexjfmI4Th2swfWOL3cUp3g=";
+            outputHash = "sha256-f/cWCr6Oqnq21u9+UyhwE5PGqE9X5K+NtjEGbZ4ORPg=";
           });
         });
       })

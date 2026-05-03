@@ -50,6 +50,7 @@
     fd
     file
     git
+    gnumake
     inputs.agenix.packages.${stdenv.hostPlatform.system}.default
     neovim
     nil
