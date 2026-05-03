@@ -18,16 +18,17 @@ in {
     stateVersion = "25.05";
 
     packages = with pkgs; [
-      entr
       conda
-      virt-manager
-      qemu
-      vlc
-      qtscrcpy
-      mission-center
-      ripgrep
-      lm_sensors
+      entr
       ffmpeg-full
+      gnome-system-monitor
+      lm_sensors
+      mission-center
+      qemu
+      qtscrcpy
+      ripgrep
+      virt-manager
+      vlc
       # from unstable
       unstable.hmcl
       unstable.zellij

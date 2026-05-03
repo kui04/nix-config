@@ -1,5 +1,5 @@
 // -*- mode: jsonc -*-
-// needed apps: misson-center, cpupower-gui, pavucontrol
+// needed apps: misson-center, cpupower-gui, pavucontrol, gnome-system-monitor
 {
     // "height": 32, auto height
     "spacing": 0,
@@ -25,7 +25,7 @@
     // left start -------------------------------------------------------------
     "cpu": {
         "format": "{usage}% \uf4bc", // nf-oct-cpu
-        "on-click": "missioncenter"
+        "on-click": "gnome-system-monitor"
     },
     "memory": {
         "format": "{}% \uefc5", // nf-fa-memory

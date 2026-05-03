@@ -29,7 +29,6 @@
     exfatprogs
     file-roller # gnome archive manager
     ghostty # terminal emulator
-    gnome-system-monitor
     gparted # partition editor
     nautilus
     ntfs3g
