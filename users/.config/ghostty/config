@@ -15,7 +15,7 @@ window-titlebar-foreground = #EEFFFF
 
 macos-titlebar-style = transparent
 
-font-family = Maple Mono NF CN
+font-family = Iosevka Nerd Font Mono
 # base01
 palette = 0=#303030
 # base08
