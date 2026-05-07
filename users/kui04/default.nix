@@ -30,12 +30,12 @@ in {
       virt-manager
       vlc
       # from unstable
-      unstable.hmcl
-      unstable.zellij
-      unstable.vscode
-      unstable.zed-editor
       unstable.antigravity
+      unstable.hmcl
       unstable.opencode
+      unstable.vscode
+      unstable.zellij
+      unstable.zed-editor
     ];
   };
 

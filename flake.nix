@@ -23,6 +23,9 @@
 
     # chinese fonts from windows iso
     chinese-fonts.url = "github:brsvh/chinese-fonts-overlay/main";
+
+    # latest opencode from official repo
+    opencode.url = "github:sst/opencode";
   };
 
   outputs = inputs @ {
