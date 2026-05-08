@@ -32,6 +32,7 @@ in {
       # from unstable
       unstable.antigravity
       unstable.hmcl
+      unstable.ollama-cuda
       unstable.opencode
       unstable.vscode
       unstable.zellij
