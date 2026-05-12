@@ -40,9 +40,15 @@
   # let hm install and manage itself
   programs.home-manager.enable = true;
 
-  # the agenix home-manager module is based on systemd user services, but the root user
-  # cannot start user-level services, so we need to decrypt it manually
-  age.identityPaths = ["/etc/ssh/ssh_host_ed25519_key"];
+  # The agenix home-manager module defaults to $XDG_RUNTIME_DIR/agenix. Root
+  # does not reliably have that directory, so keep its generation state stable.
+  age = {
+    identityPaths = ["/etc/ssh/ssh_host_ed25519_key"];
+    secretsDir = "${homeDirectory}/.local/share/agenix";
+    secretsMountPoint = "${homeDirectory}/.local/share/agenix.d";
+  };
+
+  # Root cannot start user-level services, so decrypt during activation.
   home.activation.decryptAgenix = lib.hm.dag.entryAfter ["writeBoundary"] ''
     ${lib.concatStringsSep " " (lib.toList config.systemd.user.services.agenix.Service.ExecStart)}
   '';

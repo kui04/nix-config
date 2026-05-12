@@ -6,8 +6,6 @@
   ...
 }: let
   homeDirectory = config.home.homeDirectory;
-  iptables = "${pkgs.iptables}/bin/iptables";
-  ip6tables = "${pkgs.iptables}/bin/ip6tables";
   systemctl = "${pkgs.systemd}/bin/systemctl";
 in {
   home = {
@@ -20,14 +18,17 @@ in {
     hysteria-server = {
       file = flakeRootPath + "/secrets/hysteria-server.age";
       path = "${homeDirectory}/.config/hysteria/config.yaml";
+      symlink = false;
     };
     hysteria-cert = {
       file = flakeRootPath + "/secrets/hysteria-server-cert.age";
       path = "${homeDirectory}/.config/hysteria/server.crt";
+      symlink = false;
     };
     hysteria-key = {
       file = flakeRootPath + "/secrets/hysteria-server-key.age";
       path = "${homeDirectory}/.config/hysteria/server.key";
+      symlink = false;
     };
   };
 
@@ -62,13 +63,5 @@ in {
     $DRY_RUN_CMD ${systemctl} daemon-reload
     $DRY_RUN_CMD ${systemctl} enable hysteria.service
     $DRY_RUN_CMD ${systemctl} restart hysteria.service
-  '';
-
-  home.activation.portHopping = lib.hm.dag.entryAfter ["installHysteriaService"] ''
-    ${iptables} -t nat -C PREROUTING -i enp1s0 -p udp --dport 20000:50000 -j REDIRECT --to-ports 443 2>/dev/null \
-      || ${iptables} -t nat -A PREROUTING -i enp1s0 -p udp --dport 20000:50000 -j REDIRECT --to-ports 443
-
-    ${ip6tables} -t nat -C PREROUTING -i enp1s0 -p udp --dport 20000:50000 -j REDIRECT --to-ports 443 2>/dev/null \
-      || ${ip6tables} -t nat -A PREROUTING -i enp1s0 -p udp --dport 20000:50000 -j REDIRECT --to-ports 443
   '';
 }

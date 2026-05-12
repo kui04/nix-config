@@ -1,5 +1,5 @@
 # A template for mihomo client config
-# The actual config is stored in secrets/mihomo.age
+# The actual config is output by users/fkgfw/gen.sh
 mixed-port: 7890
 allow-lan: true
 bind-address: "*"

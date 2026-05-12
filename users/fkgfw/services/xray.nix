@@ -18,6 +18,7 @@ in {
     xray-server = {
       file = flakeRootPath + "/secrets/xray-server.age";
       path = "${homeDirectory}/.config/xray/config.jsonc";
+      symlink = false;
     };
   };
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
 # Find flake.nix to determine root directory
 ROOT_DIR="$PWD"
@@ -25,43 +25,37 @@ MIHOMO_CLIENT_TEMPLATE="$TEMPLATE_DIR/mihomo.yaml"
 # Validate templates exist
 for f in "$XRAY_SERVER_TEMPLATE" "$HY2_SERVER_TEMPLATE" "$MIHOMO_CLIENT_TEMPLATE"; do
     if [[ ! -f "$f" ]]; then
-        echo "Error: Cannot find template file $f"
+        echo "Error: Cannot find template file $f" >&2
         exit 1
     fi
 done
 
 if [[ ! -f "$SECRETS_DIR/secrets.nix" ]]; then
-    echo "Error: Cannot find secrets.nix in $SECRETS_DIR"
+    echo "Error: Cannot find secrets.nix in $SECRETS_DIR" >&2
     exit 1
 fi
 
-# --- User Inputs ---
-echo -n "Please enter the server IP or domain: "
-read -r SERVER_ADDR
-echo "You entered: $SERVER_ADDR"
-echo ""
-
 # --- Generate Xray credentials ---
-echo "Generating Xray UUID..."
+echo "Generating Xray UUID..." >&2
 VLESS_UUID=$(nix run nixpkgs#xray -- uuid)
 
-echo "Generating Xray X25519 keys..."
+echo "Generating Xray X25519 keys..." >&2
 X25519_OUT=$(nix run nixpkgs#xray -- x25519)
 
-VLESS_PRIVATEKEY=$(echo "$X25519_OUT" | grep -iE 'Private[Kk]ey|Private key' | sed 's/.*:[[:space:]]*//')
-VLESS_PUBLICKEY=$(echo "$X25519_OUT" | grep -i 'Password' | sed 's/.*:[[:space:]]*//')
+VLESS_PRIVATEKEY=$(printf '%s\n' "$X25519_OUT" | sed -nE 's/^(PrivateKey|Private key):[[:space:]]*//p' | head -n 1)
+VLESS_PUBLICKEY=$(printf '%s\n' "$X25519_OUT" | sed -nE 's/^(PublicKey|Public key|Password):[[:space:]]*//p' | head -n 1)
 
 if [[ -z "$VLESS_PRIVATEKEY" || -z "$VLESS_PUBLICKEY" ]]; then
-    echo "Error: Failed to extract X25519 keys from xray output:"
-    echo "$X25519_OUT"
+    echo "Error: Failed to extract X25519 keys from xray output:" >&2
+    echo "$X25519_OUT" >&2
     exit 1
 fi
 
 # --- Generate Hysteria2 credentials ---
-echo "Generating Hysteria2 password..."
+echo "Generating Hysteria2 password..." >&2
 HY2_PASSWORD=$(nix run nixpkgs#openssl -- rand -base64 32)
 
-echo "Generating self-signed TLS certificate for Hysteria2..."
+echo "Generating self-signed TLS certificate for Hysteria2..." >&2
 TMP_CERT=$(mktemp)
 TMP_KEY=$(mktemp)
 nix run nixpkgs#openssl -- req -x509 -nodes -newkey ec:<(nix run nixpkgs#openssl -- ecparam -name prime256v1) \
@@ -73,11 +67,12 @@ FINGERPRINT=$(nix run nixpkgs#openssl -- x509 -noout -fingerprint -sha256 -in "$
     | sed 's/.*=//; s/://g; y/ABCDEF/abcdef/')
 
 # --- Fill templates (without modifying originals) ---
-echo "Filling data into templates..."
+echo "Filling data into templates..." >&2
 
 TMP_XRAY_SERVER=$(mktemp)
 TMP_HY2_SERVER=$(mktemp)
 TMP_MIHOMO_CLIENT=$(mktemp)
+trap 'rm -f "$TMP_XRAY_SERVER" "$TMP_HY2_SERVER" "$TMP_MIHOMO_CLIENT" "${TMP_CERT:-}" "${TMP_KEY:-}"' EXIT
 
 # Xray server config
 sed -e "s|VLESS_UUID|$VLESS_UUID|" \
@@ -88,9 +83,8 @@ sed -e "s|VLESS_UUID|$VLESS_UUID|" \
 sed -e "s|HY2_PASSWORD|$HY2_PASSWORD|" \
     "$HY2_SERVER_TEMPLATE" > "$TMP_HY2_SERVER"
 
-# Mihomo client config
-sed -e "s|SERVER_IP_OR_DOMAIN|$SERVER_ADDR|g" \
-    -e "s|HY2_PASSWORD|$HY2_PASSWORD|" \
+# Mihomo client config. SERVER_IP_OR_DOMAIN is intentionally left for vultr/oracle.
+sed -e "s|HY2_PASSWORD|$HY2_PASSWORD|" \
     -e "s|FINGERPRINT|$FINGERPRINT|" \
     -e "s|VLESS_UUID|$VLESS_UUID|" \
     -e "s|VLESS_PUBLIC_KEY|$VLESS_PUBLICKEY|" \
@@ -99,45 +93,34 @@ sed -e "s|SERVER_IP_OR_DOMAIN|$SERVER_ADDR|g" \
 # --- Encrypt with agenix ---
 cd "$SECRETS_DIR"
 
-echo "Encrypting xray-server.age..."
+echo "Encrypting xray-server.age..." >&2
 rm -f xray-server.age
-EDITOR="cp $TMP_XRAY_SERVER" nix run github:ryantm/agenix -- -e xray-server.age
+EDITOR="cp $TMP_XRAY_SERVER" nix run github:ryantm/agenix -- -e xray-server.age >&2
 
-echo "Encrypting hysteria-server.age..."
+echo "Encrypting hysteria-server.age..." >&2
 rm -f hysteria-server.age
-EDITOR="cp $TMP_HY2_SERVER" nix run github:ryantm/agenix -- -e hysteria-server.age
+EDITOR="cp $TMP_HY2_SERVER" nix run github:ryantm/agenix -- -e hysteria-server.age >&2
 
-echo "Encrypting hysteria-server-cert.age..."
+echo "Encrypting hysteria-server-cert.age..." >&2
 rm -f hysteria-server-cert.age
-EDITOR="cp $TMP_CERT" nix run github:ryantm/agenix -- -e hysteria-server-cert.age
+EDITOR="cp $TMP_CERT" nix run github:ryantm/agenix -- -e hysteria-server-cert.age >&2
 
-echo "Encrypting hysteria-server-key.age..."
+echo "Encrypting hysteria-server-key.age..." >&2
 rm -f hysteria-server-key.age
-EDITOR="cp $TMP_KEY" nix run github:ryantm/agenix -- -e hysteria-server-key.age
+EDITOR="cp $TMP_KEY" nix run github:ryantm/agenix -- -e hysteria-server-key.age >&2
 
-echo "Encrypting mihomo-client.age..."
-rm -f mihomo-client.age
-EDITOR="cp $TMP_MIHOMO_CLIENT" nix run github:ryantm/agenix -- -e mihomo-client.age
+echo "" >&2
+echo "=============================================" >&2
+echo "All server configs generated and encrypted:" >&2
+echo "  1. $SECRETS_DIR/xray-server.age" >&2
+echo "  2. $SECRETS_DIR/hysteria-server.age" >&2
+echo "  3. $SECRETS_DIR/hysteria-server-cert.age" >&2
+echo "  4. $SECRETS_DIR/hysteria-server-key.age" >&2
+echo "" >&2
+echo "The mihomo config has been written to stdout." >&2
+echo "Replace SERVER_IP_OR_DOMAIN with the vultr or oracle IP/domain." >&2
+echo "Example:" >&2
+echo "  ./users/fkgfw/gen.sh | sed 's/SERVER_IP_OR_DOMAIN/<vps-ip-or-domain>/g'" >&2
+echo "=============================================" >&2
 
-cat "$TMP_XRAY_SERVER" "$TMP_HY2_SERVER" "$TMP_MIHOMO_CLIENT" "$TMP_CERT" "$TMP_KEY"
-
-# --- Cleanup ---
-rm -f "$TMP_XRAY_SERVER" "$TMP_HY2_SERVER" "$TMP_MIHOMO_CLIENT" "$TMP_CERT" "$TMP_KEY"
-
-echo ""
-echo "============================================="
-echo "All configs generated and encrypted:"
-echo "  1. $SECRETS_DIR/xray-server.age"
-echo "  2. $SECRETS_DIR/hysteria-server.age"
-echo "  3. $SECRETS_DIR/hysteria-server-cert.age"
-echo "  4. $SECRETS_DIR/hysteria-server-key.age"
-echo "  5. $SECRETS_DIR/mihomo-client.age"
-echo ""
-echo "Parameters (SAVE THESE):"
-echo "  Server Address   : $SERVER_ADDR"
-echo "  Xray UUID        : $VLESS_UUID"
-echo "  Xray Public Key  : $VLESS_PUBLICKEY"
-echo "  Xray Private Key : $VLESS_PRIVATEKEY"
-echo "  HY2 Password     : $HY2_PASSWORD"
-echo "  HY2 Cert SHA256  : $FINGERPRINT"
-echo "============================================="
+cat "$TMP_MIHOMO_CLIENT"
