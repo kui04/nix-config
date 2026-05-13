@@ -34,7 +34,7 @@ git clone https://github.com/kui04/nix-config /root/.nix-config
 If you want to reuse this flake on another VPS, update `secrets/secrets.nix`
 before switching:
 
-- add the new VPS host public key
+- add the new VPS host's public key (use only `cat /etc/ssh/ssh_host_ed25519_key.pub`; do not use any other key)
 - remove public keys that no longer need access
 - if you only changed recipients, re-encrypt the existing `.age` files for the
   updated recipient list
