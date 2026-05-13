@@ -37,7 +37,7 @@ before switching:
 - add the new VPS host's public key (use only `cat /etc/ssh/ssh_host_ed25519_key.pub`; do not use any other key)
 - remove public keys that no longer need access
 - if you only changed recipients, re-encrypt the existing `.age` files for the
-  updated recipient list
+  updated recipient list (`sudo agenix -r -i /etc/ssh/ssh_host_ed25519_key`)
 - run `./users/fkgfw/gen.sh` only when you want fresh server credentials or a
   new mihomo config
 
