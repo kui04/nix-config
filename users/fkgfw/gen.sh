@@ -18,6 +18,16 @@ fi
 TEMPLATE_DIR="$ROOT_DIR/users/fkgfw/services/templates"
 SECRETS_DIR="$ROOT_DIR/secrets"
 
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+    GREEN=$'\033[32m'
+    RED=$'\033[31m'
+    RESET=$'\033[0m'
+else
+    GREEN=""
+    RED=""
+    RESET=""
+fi
+
 XRAY_SERVER_TEMPLATE="$TEMPLATE_DIR/xray.jsonc"
 HY2_SERVER_TEMPLATE="$TEMPLATE_DIR/hy2.yaml"
 MIHOMO_CLIENT_TEMPLATE="$TEMPLATE_DIR/mihomo.yaml"
@@ -116,11 +126,12 @@ echo "  1. $SECRETS_DIR/xray-server.age" >&2
 echo "  2. $SECRETS_DIR/hysteria-server.age" >&2
 echo "  3. $SECRETS_DIR/hysteria-server-cert.age" >&2
 echo "  4. $SECRETS_DIR/hysteria-server-key.age" >&2
-echo "" >&2
-echo "The mihomo config has been written to stdout." >&2
-echo "Replace SERVER_IP_OR_DOMAIN with the vultr or oracle IP/domain." >&2
-echo "Example:" >&2
-echo "  ./users/fkgfw/gen.sh | sed 's/SERVER_IP_OR_DOMAIN/<vps-ip-or-domain>/g'" >&2
 echo "=============================================" >&2
+echo "" >&2
 
+echo "${GREEN}========== MIHOMO CONFIG START ==========${RESET}"
 cat "$TMP_MIHOMO_CLIENT"
+echo "${GREEN}=========== MIHOMO CONFIG END ===========${RESET}"
+echo "${RED}Save the mihomo config between the green markers as mihomo.yaml.${RESET}"
+echo "${RED}Replace SERVER_IP_OR_DOMAIN with IP/domain before using it.${RESET}"
+echo "${RED}Import mihomo.yaml into mihomo/Clash Meta, or start mihomo with this config file.${RESET}"

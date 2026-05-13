@@ -4,7 +4,7 @@ let
 
   thinkbook = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAtj7APUSUfvyTWAGNYT0Amf7qS99lwA6vKEMpNIrn8X";
 
-  vultr = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIILi2Bktx8pqRLdFl72bS46DBA0reajHtKKsHgZpLGDo";
+  vultr = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDCpz6d04JtnGhHu+xE+h+mANl14pKocGOLvYAnsOXBA";
   oracle = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILeTz40GfCGYIAksoSvXqADsGokrx8+rFa4x4EPV7ALh";
 
   proxy-vps = [ vultr oracle ];
