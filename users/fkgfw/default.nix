@@ -17,15 +17,15 @@
     inherit homeDirectory;
 
     packages = with pkgs; [
-      zellij
-      libcap
-      helix
-      nil
       agenix.packages.x86_64-linux.default
+      htop
+      libcap
+      neovim
+      zellij
     ];
 
     sessionVariables = {
-      EDITOR = "helix";
+      EDITOR = "neovim";
     };
   };
 
