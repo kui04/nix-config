@@ -9,6 +9,7 @@
 }: {
   imports = [
     ./services/hysteria.nix
+    ./services/systemd-system.nix
     ./services/xray.nix
   ];
 
