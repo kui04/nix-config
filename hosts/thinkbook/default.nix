@@ -19,7 +19,6 @@
     ../../services/gdm.nix
     ../../services/niri.nix
     ../../services/sunshine.nix
-    ../../services/waydroid.nix
   ];
 
   # flakes
@@ -162,7 +161,7 @@
   # enable the OpenSSH daemon.
   services.openssh.enable = true;
 
-  # create_ap service tuned for 2.4 GHz (Wi-Fi 4 802.11n, HT20)
+  # create_ap service tuned for Wi-Fi 6 HE40 2.4 GHz operation
   services.create_ap = {
     enable = true;
     settings = {
@@ -173,15 +172,16 @@
       SHARE_METHOD = "nat";
       GATEWAY = "192.168.12.1";
       FREQ_BAND = "2.4";
-      CHANNEL = "11";
+      CHANNEL = "6";
       COUNTRY = "CN";
-      WPA_VERSION = "2";
+      WPA_VERSION = "3";
       DRIVER = "nl80211";
       IEEE80211N = "1";
       IEEE80211AC = "0";
       IEEE80211AX = "1";
 
-      HT_CAPAB = "[SHORT-GI-20][RX-STBC1]";
+      # HT40-, LDPC, dual-GI, STBC for best throughput @ 2.4 GHz
+      HT_CAPAB = "[HT40-][LDPC][SHORT-GI-20][SHORT-GI-40][TX-STBC][RX-STBC1]";
     };
   };
 
