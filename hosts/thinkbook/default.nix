@@ -161,7 +161,7 @@
   # enable the OpenSSH daemon.
   services.openssh.enable = true;
 
-  # create_ap service tuned for Wi-Fi 6 HE40 2.4 GHz operation
+  # create_ap service tuned for 2.4 GHz (Wi-Fi 4 802.11n, HT20)
   services.create_ap = {
     enable = true;
     settings = {
@@ -172,16 +172,15 @@
       SHARE_METHOD = "nat";
       GATEWAY = "192.168.12.1";
       FREQ_BAND = "2.4";
-      CHANNEL = "6";
+      CHANNEL = "11";
       COUNTRY = "CN";
-      WPA_VERSION = "3";
+      WPA_VERSION = "2";
       DRIVER = "nl80211";
       IEEE80211N = "1";
       IEEE80211AC = "0";
       IEEE80211AX = "1";
 
-      # HT40-, LDPC, dual-GI, STBC for best throughput @ 2.4 GHz
-      HT_CAPAB = "[HT40-][LDPC][SHORT-GI-20][SHORT-GI-40][TX-STBC][RX-STBC1]";
+      HT_CAPAB = "[SHORT-GI-20][RX-STBC1]";
     };
   };
 
