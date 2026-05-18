@@ -18,6 +18,7 @@ in {
     stateVersion = "25.05";
 
     packages = with pkgs; [
+      chromium
       conda
       entr
       ffmpeg-full
