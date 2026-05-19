@@ -25,7 +25,7 @@
     chinese-fonts.url = "github:brsvh/chinese-fonts-overlay/main";
 
     # latest opencode from official repo
-    opencode.url = "github:sst/opencode";
+    opencode.url = "github:sst/opencode/v1.15.4";
   };
 
   outputs = inputs @ {
