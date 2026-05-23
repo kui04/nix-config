@@ -89,9 +89,12 @@
     ];
   };
 
-  # bootloader
+  # boot related
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
+  boot.extraModprobeConfig = ''
+    options rtw89_pci disable_aspm_l1=y disable_aspm_l1ss=y
+  '';
 
   # systemd
   systemd.user.extraConfig = ''
