@@ -164,27 +164,40 @@
   # enable the OpenSSH daemon.
   services.openssh.enable = true;
 
-  # create_ap service tuned for 2.4 GHz (Wi-Fi 4 802.11n, HT20)
-  services.create_ap = {
-    enable = true;
-    settings = {
-      INTERNET_IFACE = "enp0s31f6";
-      WIFI_IFACE = "wlp44s0";
-      SSID = "my-ap";
-      PASSPHRASE = "asdfghjkl";
-      SHARE_METHOD = "nat";
-      GATEWAY = "192.168.12.1";
-      FREQ_BAND = "2.4";
-      CHANNEL = "11";
-      COUNTRY = "CN";
-      WPA_VERSION = "2";
-      DRIVER = "nl80211";
-      IEEE80211N = "1";
-      IEEE80211AC = "0";
-      IEEE80211AX = "1";
-
-      HT_CAPAB = "[SHORT-GI-20][RX-STBC1]";
+  # NetworkManager hotspot on the internal Wi-Fi card.
+  services.create_ap.enable = false;
+  networking.networkmanager.ensureProfiles.profiles."my-ap" = {
+    connection = {
+      id = "my-ap";
+      type = "wifi";
+      interface-name = "wlp44s0";
+      autoconnect = true;
+      autoconnect-priority = 100;
+      permissions = "";
     };
+
+    wifi = {
+      mode = "ap";
+      ssid = "my-ap";
+      band = "a";
+      channel = 36;
+    };
+
+    wifi-security = {
+      key-mgmt = "wpa-psk";
+      proto = "rsn";
+      pairwise = "ccmp";
+      group = "ccmp";
+      psk = "asdfghjkl";
+    };
+
+    ipv4 = {
+      method = "shared";
+      address1 = "192.168.12.1/24";
+      shared-dhcp-range = "192.168.12.10,192.168.12.250";
+    };
+
+    ipv6.method = "ignore";
   };
 
   # This value determines the NixOS release from which the default
