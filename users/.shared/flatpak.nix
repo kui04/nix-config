@@ -1,5 +1,6 @@
 {
   config,
+  lib,
   pkgs,
   ...
 }: let
@@ -33,10 +34,15 @@ in {
           "${pkgs.bibata-cursors}/share/icons:ro"
         ];
       };
+    };
 
-      Enviroment = {
-        # force correct theme
-        GTK_THEME = "Adwaita:dark";
+    "com.valvesoftware.Steam" = {
+      Environment = {
+        GDK_BACKEND = "x11";
+        XDG_SESSION_TYPE = "x11";
+        __NV_PRIME_RENDER_OFFLOAD = "1";
+        __GLX_VENDOR_LIBRARY_NAME = "nvidia";
+        __GL_THREADED_OPTIMIZATIONS = "0";
       };
     };
   };
