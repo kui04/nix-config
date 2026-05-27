@@ -28,5 +28,15 @@
       "Groups/0/Items/0".Name = "keyboard-us";
       "Groups/0/Items/1".Name = "pinyin";
     };
+
+    fcitx5.settings.addons = {
+      pinyin.globalSection = {
+        CloudPinyinEnabled = "True";
+        CloudPinyinIndex = 2;
+      };
+      cloudpinyin.globalSection = {
+        Backend = "Baidu";
+      };
+    };
   };
 }
