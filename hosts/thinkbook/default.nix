@@ -170,7 +170,7 @@
     connection = {
       id = "my-ap";
       type = "wifi";
-      interface-name = "wlp44s0";
+      interface-name = "wlan0";
       autoconnect = true;
       autoconnect-priority = 100;
       permissions = "";
