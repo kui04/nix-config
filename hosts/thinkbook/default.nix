@@ -165,40 +165,24 @@
   # enable the OpenSSH daemon.
   services.openssh.enable = true;
 
-  # NetworkManager hotspot on the internal Wi-Fi card.
-  services.create_ap.enable = false;
-  networking.networkmanager.ensureProfiles.profiles."my-ap" = {
-    connection = {
-      id = "my-ap";
-      type = "wifi";
-      interface-name = "wlan0";
-      autoconnect = true;
-      autoconnect-priority = 100;
-      permissions = "";
+  # create_ap service for 5 GHz Wi-Fi 6 hotspot
+  services.create_ap = {
+    enable = true;
+    settings = {
+      INTERNET_IFACE = "enp0s31f6";
+      WIFI_IFACE = "wlan0";
+      SSID = "my-ap";
+      PASSPHRASE = "asdfghjkl";
+      FREQ_BAND = "5";
+      CHANNEL = "149";
+      COUNTRY = "CN";
+      WPA_VERSION = "2";
+      IEEE80211N = "1";
+      IEEE80211AC = "1";
+      IEEE80211AX = "1";
+      HT_CAPAB = "[HT40+][SHORT-GI-40][TX-STBC][RX-STBC1]";
+      VHT_CAPAB = "[MAX-MPDU-11454][SHORT-GI-80][TX-STBC][RX-STBC-1][SU-BEAMFORMEE][MU-BEAMFORMEE]";
     };
-
-    wifi = {
-      mode = "ap";
-      ssid = "my-ap";
-      band = "bg";
-      channel = 6;
-    };
-
-    wifi-security = {
-      key-mgmt = "wpa-psk";
-      proto = "rsn";
-      pairwise = "ccmp";
-      group = "ccmp";
-      psk = "asdfghjkl";
-    };
-
-    ipv4 = {
-      method = "shared";
-      address1 = "192.168.12.1/24";
-      shared-dhcp-range = "192.168.12.10,192.168.12.250";
-    };
-
-    ipv6.method = "ignore";
   };
 
   # This value determines the NixOS release from which the default

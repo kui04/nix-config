@@ -9,10 +9,6 @@
     networking.firewall.enable = true;
     networking.hostName = hostname;
     networking.networkmanager.enable = true;
-    networking.networkmanager.wifi.backend = "iwd";
-    networking.wireless.iwd.settings.General = {
-      AddressRandomization = "once";
-    };
     networking.firewall.trustedInterfaces = ["tailscale0"];
     networking.firewall.allowedTCPPorts = [
       22 # OpenSSH
