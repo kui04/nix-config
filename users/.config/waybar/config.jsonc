@@ -1,5 +1,5 @@
 // -*- mode: jsonc -*-
-// needed apps: misson-center, cpupower-gui, pavucontrol, gnome-system-monitor
+// needed apps: misson-center, pavucontrol, gnome-system-monitor
 {
     // "height": 32, auto height
     "spacing": 0,
@@ -35,7 +35,7 @@
         "format": "{temperatureC}°C \uf2c9", // nf-fa-temperature_half
         "tooltip": false,
         "hwmon-path": "/tmp/waybar/coretemp_temp_input",
-        "on-click": "cpupower-gui"
+        "on-click": "missioncenter"
     },
     "battery": {
         "states": {

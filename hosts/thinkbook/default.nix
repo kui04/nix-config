@@ -90,6 +90,9 @@
     ];
   };
 
+  # thermald
+  services.thermald.enable = true;
+
   # boot related
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;

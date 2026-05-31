@@ -17,7 +17,6 @@
   services.udisks2.enable = true;
 
   services.blueman.enable = true;
-  services.cpupower-gui.enable = true;
   services.power-profiles-daemon.enable = true;
 
   # keyring and polkit
