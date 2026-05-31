@@ -173,7 +173,7 @@
     enable = true;
     settings = {
       INTERNET_IFACE = "enp0s31f6";
-      WIFI_IFACE = "wlan0";
+      WIFI_IFACE = "wlp44s0";
       SSID = "my-ap";
       PASSPHRASE = "asdfghjkl";
       FREQ_BAND = "5";
