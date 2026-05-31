@@ -179,8 +179,8 @@
     wifi = {
       mode = "ap";
       ssid = "my-ap";
-      band = "a";
-      channel = 36;
+      band = "bg";
+      channel = 6;
     };
 
     wifi-security = {
