@@ -55,6 +55,7 @@
   # list packages installed in system profile
   environment.systemPackages = with pkgs; [
     alejandra
+    busybox
     cachix
     fd
     file
