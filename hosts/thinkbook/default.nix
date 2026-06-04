@@ -16,7 +16,7 @@
     # services
     ../../services/xdg-portal.nix
     ../../services/flatpak.nix
-    ../../services/sddm.nix
+    ../../services/ly.nix
     ../../services/niri.nix
     ../../services/sunshine.nix
   ];
