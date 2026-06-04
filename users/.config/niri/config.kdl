@@ -120,7 +120,7 @@ output "eDP-1" {
 
 // Make the wallpaper stationary, rather than moving with workspaces.
 layer-rule {
-    match namespace="^swww-daemonoverlay$"
+    match namespace="^awww-daemonoverlay$"
     place-within-backdrop true
 }
 
@@ -289,8 +289,8 @@ layout {
 spawn-at-startup "mako"
 spawn-at-startup "/home/kui04/.config/waybar/cpu_temp.sh"
 spawn-at-startup "waybar"
-spawn-at-startup "swww-daemon" 
-spawn-at-startup "swww-daemon" "-n" "overlay" 
+spawn-at-startup "awww-daemon" 
+spawn-at-startup "awww-daemon" "-n" "overlay" 
 spawn-at-startup "/home/kui04/.config/swayidle/watch.sh"
 spawn-at-startup "xrdb" "-merge" "/home/kui04/.Xresources"
 spawn-at-startup "copyq"
