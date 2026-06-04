@@ -46,7 +46,7 @@ before switching:
 Run this from a root shell:
 
 ```sh
-nix run github:nix-community/home-manager/release-25.11 -- switch --flake /root/.nix-config#fkgfw
+nix run github:nix-community/home-manager/release-26.05 -- switch --flake /root/.nix-config#fkgfw
 ```
 
 After the first switch, `home-manager` is installed by the profile and `hs`

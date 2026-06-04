@@ -1,13 +1,13 @@
 {
   inputs = {
     # packages
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 
     # unstable packages
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
     # home-manager
-    home-manager.url = "github:nix-community/home-manager/release-25.11";
+    home-manager.url = "github:nix-community/home-manager/release-26.05";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
 
     # age-encrypted secrets
@@ -18,7 +18,7 @@
     nix-flatpak.url = "github:gmodena/nix-flatpak/?ref=latest";
 
     # theming framework
-    stylix.url = "github:nix-community/stylix/release-25.11";
+    stylix.url = "github:nix-community/stylix/release-26.05";
     stylix.inputs.nixpkgs.follows = "nixpkgs";
 
     # chinese fonts from windows iso
