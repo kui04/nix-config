@@ -69,6 +69,7 @@
     unzip
     wget
     zip
+    gpu-screen-recorder-gtk
   ];
 
   # adb
@@ -76,6 +77,8 @@
   # obs
   programs.obs-studio.enable = true;
   programs.obs-studio.enableVirtualCamera = true;
+  # for promptless recording on both cli and gui
+  programs.gpu-screen-recorder.enable = true;
 
   # define a user account. don't forget to set a password with 'passwd'.
   users.users.${username} = {
