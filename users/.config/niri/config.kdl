@@ -381,7 +381,7 @@ window-rule {
 window-rule {
     match app-id="com.github.hluk.copyq"
     match app-id=".blueman-manager-wrapped"
-    match app-id="Clash-verge"
+    match app-id="clash-verge"
     match app-id="wihotspot"
     match app-id="org.pulseaudio.pavucontrol"
     match app-id="org.gnome.SystemMonitor"
