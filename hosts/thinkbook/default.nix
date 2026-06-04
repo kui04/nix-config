@@ -55,6 +55,7 @@
   # list packages installed in system profile
   environment.systemPackages = with pkgs; [
     alejandra
+    android-tools
     busybox
     cachix
     fd
@@ -72,8 +73,6 @@
     gpu-screen-recorder-gtk
   ];
 
-  # adb
-  programs.adb.enable = true;
   # obs
   programs.obs-studio.enable = true;
   programs.obs-studio.enableVirtualCamera = true;
@@ -89,7 +88,6 @@
       "wheel"
       "docker"
       "libvirtd"
-      "adbusers"
     ];
   };
 
