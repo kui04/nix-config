@@ -37,9 +37,13 @@
   nix.settings = {
     substituters = [
       "https://cache.nixos-cuda.org"
+      "https://pi.cachix.org"
+      "https://nix-community.cachix.org"
     ];
     trusted-public-keys = [
       "cache.nixos-cuda.org:74DUi4Ye579gUqzH4ziL9IyiJBlDpMRn9MBN8oNan9M="
+      "pi.cachix.org-1:lGeoGJaZ5ZDabuRzkcD5EBTNnDM4HJ1vqeOxlWk1Flk="
+      "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
     ];
   };
 

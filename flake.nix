@@ -26,6 +26,10 @@
 
     # latest opencode from official repo
     opencode.url = "github:sst/opencode/v1.15.4";
+
+    # unoffical nix flake for [pi](https://github.com/earendil-works/pi)
+    pi.url = "github:lukasl-dev/pi.nix";
+    pi.inputs.nixpkgs.follows = "nixpkgs-unstable";
   };
 
   outputs = inputs @ {
@@ -66,6 +70,7 @@
 
             inputs.nix-flatpak.homeManagerModules.nix-flatpak
             inputs.stylix.homeModules.stylix
+            inputs.pi.homeModules.default
           ];
         }
       ];
