@@ -133,6 +133,8 @@
   # virtualization
   virtualisation.docker.enable = true;
   virtualisation.libvirtd.enable = true;
+  # nvidia-container-toolkit for GPU passthrough in docker 
+  hardware.nvidia-container-toolkit.enable = true;
 
   # graphics
   hardware.graphics.enable = true;
