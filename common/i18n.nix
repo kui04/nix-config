@@ -49,7 +49,7 @@
           "Noto Sans CJK SC"
         ];
         monospace = [
-          "AdwaitaMono Nerd Font"
+          "Sarasa Term SC"
           "Iosevka NF"
         ];
       };
