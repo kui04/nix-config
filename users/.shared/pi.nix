@@ -11,14 +11,14 @@ in {
       "npm:context-mode"
       # https://github.com/edlsh/pi-ask-user
       "npm:pi-ask-user"
-      # https://github.com/apmantza/pi-lens
-      "npm:pi-lens"
-      # https://github.com/nicobailon/pi-mcp-adapter
-      "npm:pi-mcp-adapter"
+      # https://github.com/coctostan/pi-hashline-readmap
+      "npm:pi-hashline-readmap"
       # https://github.com/omaclaren/pi-markdown-preview
       "npm:pi-markdown-preview"
-      # https://github.com/nicobailon/pi-subagents
-      "npm:pi-subagents"
+      # https://github.com/nicobailon/pi-mcp-adapter
+      "npm:pi-mcp-adapter"
+      # https://github.com/AlexParamonov/pi-subagents-lite
+      "npm:pi-subagents-lite"
     ];
 
     extensions = [];
@@ -34,5 +34,12 @@ in {
   home.packages = with pkgs; [
     ripgrep
     fd
+    ast-grep
+    nushell
+    universal-ctags
+    difftastic
+    shellcheck
+    yq
+    scc
   ];
 }
