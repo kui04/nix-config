@@ -15,7 +15,7 @@ window-titlebar-foreground = #EEFFFF
 
 macos-titlebar-style = transparent
 
-font-family = Iosevka Nerd Font Mono
+font-family = Sarasa Term SC
 # base01
 palette = 0=#303030
 # base08
