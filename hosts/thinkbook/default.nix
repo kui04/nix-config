@@ -91,7 +91,6 @@
       "networkmanager"
       "wheel"
       "docker"
-      "libvirtd"
     ];
   };
 
@@ -132,7 +131,11 @@
 
   # virtualization
   virtualisation.docker.enable = true;
-  virtualisation.libvirtd.enable = true;
+  virtualisation.virtualbox.host.enable = true;
+  virtualisation.virtualbox.host.enableExtensionPack = true;
+  virtualisation.virtualbox.guest.enable = true;
+  virtualisation.virtualbox.guest.dragAndDrop = true;
+  users.extraGroups.vboxusers.members = [ username ];
   # nvidia-container-toolkit for GPU passthrough in docker 
   hardware.nvidia-container-toolkit.enable = true;
 

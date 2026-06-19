@@ -29,7 +29,6 @@ in {
       qemu
       qtscrcpy
       ripgrep
-      virt-manager
       vlc
       # from unstable
       unstable.antigravity
