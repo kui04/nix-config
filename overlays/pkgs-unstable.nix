@@ -5,7 +5,7 @@
 
     # unstable package overlays
     overlays = [
-      inputs.opencode.overlays.default
+      # inputs.opencode.overlays.default
     ];
   };
 }

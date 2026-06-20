@@ -35,7 +35,6 @@ in {
       unstable.hmcl
       unstable.ollama-cuda
       unstable.opencode
-      unstable.opencode-desktop
       unstable.vscode
       unstable.zellij
       unstable.zed-editor
@@ -73,13 +72,14 @@ in {
   programs.bash.enable = true;
   programs.bash.initExtra = "fastfetch -l windows";
   programs.bash.shellAliases = {
+    clean = "sudo nix-collect-garbage -d";
     nv = "nvidia-offload";
     nf = "nix flake new -t github:nix-community/nix-direnv";
+    po = "NIRI_SOCKET=$(find /run/user/$(id -u) -name 'niri.*.sock' -type s 2>/dev/null | head -1) niri msg action power-on-monitors";
+    reboot-to-win = "systemctl reboot --boot-loader-entry=auto-windows";
     ug = "sudo nixos-rebuild switch --flake ~/.nix-config#thinkbook";
     up = "sudo nix flake update --flake ~/.nix-config";
     ut = "sudo nixos-rebuild test --flake ~/.nix-config#thinkbook";
-    reboot-to-win = "systemctl reboot --boot-loader-entry=auto-windows";
-    clean = "sudo nix-collect-garbage -d";
   };
 
   # starship
