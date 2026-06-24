@@ -3,13 +3,14 @@
   config,
   hostname,
   ...
-}: {
+}:
+{
   config = {
     # networking
     networking.firewall.enable = true;
     networking.hostName = hostname;
     networking.networkmanager.enable = true;
-    networking.firewall.trustedInterfaces = ["tailscale0"];
+    networking.firewall.trustedInterfaces = [ "tailscale0" ];
     networking.firewall.allowedTCPPorts = [
       22 # OpenSSH
       7897 # Clash Verge

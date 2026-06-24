@@ -1,4 +1,4 @@
-{...}: {
+{ ... }: {
   config = {
     # enable sound with pipewire.
     services.pulseaudio.enable = false;

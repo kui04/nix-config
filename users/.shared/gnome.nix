@@ -1,4 +1,5 @@
-{pkgs, ...}: let
+{ pkgs, ... }:
+let
   gnomeExtensions = with pkgs.gnomeExtensions; [
     appindicator
     blur-my-shell
@@ -9,9 +10,10 @@
     rounded-window-corners-reborn
     user-themes
   ];
-in {
+in
+{
   # GNOME Tweaks and Extensions
-  home.packages = [pkgs.gnome-tweaks] ++ gnomeExtensions;
+  home.packages = [ pkgs.gnome-tweaks ] ++ gnomeExtensions;
 
   # dconf settings for GNOME
   dconf.enable = true;
@@ -32,21 +34,21 @@ in {
     };
 
     "org/gnome/desktop/wm/keybindings" = {
-      show-desktop = ["<Super>d"];
-      move-to-workspace-right = ["<Control><Alt>Right"];
-      move-to-workspace-left = ["<Control><Alt>Left"];
-      switch-to-workspace-1 = ["<Alt>1"];
-      switch-to-workspace-2 = ["<Alt>2"];
-      switch-to-workspace-3 = ["<Alt>3"];
-      switch-to-workspace-4 = ["<Alt>4"];
-      move-to-workspace-1 = ["<Shift><Alt>1"];
-      move-to-workspace-2 = ["<Shift><Alt>2"];
-      move-to-workspace-3 = ["<Shift><Alt>3"];
-      move-to-workspace-4 = ["<Shift><Alt>4"];
-      move-to-monitor-down = [];
-      move-to-monitor-left = [];
-      move-to-monitor-right = [];
-      move-to-monitor-up = [];
+      show-desktop = [ "<Super>d" ];
+      move-to-workspace-right = [ "<Control><Alt>Right" ];
+      move-to-workspace-left = [ "<Control><Alt>Left" ];
+      switch-to-workspace-1 = [ "<Alt>1" ];
+      switch-to-workspace-2 = [ "<Alt>2" ];
+      switch-to-workspace-3 = [ "<Alt>3" ];
+      switch-to-workspace-4 = [ "<Alt>4" ];
+      move-to-workspace-1 = [ "<Shift><Alt>1" ];
+      move-to-workspace-2 = [ "<Shift><Alt>2" ];
+      move-to-workspace-3 = [ "<Shift><Alt>3" ];
+      move-to-workspace-4 = [ "<Shift><Alt>4" ];
+      move-to-monitor-down = [ ];
+      move-to-monitor-left = [ ];
+      move-to-monitor-right = [ ];
+      move-to-monitor-up = [ ];
     };
     # custom keybindings
     "org/gnome/settings-daemon/plugins/media-keys" = {

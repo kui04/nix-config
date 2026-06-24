@@ -1,4 +1,4 @@
-{pkgs, ...}: {
+{ pkgs, ... }: {
   # needed for flatpak and niri
   xdg.portal = {
     enable = true;

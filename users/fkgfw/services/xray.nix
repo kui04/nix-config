@@ -3,9 +3,11 @@
   config,
   flakeRootPath,
   ...
-}: let
+}:
+let
   homeDirectory = config.home.homeDirectory;
-in {
+in
+{
   home = {
     packages = with pkgs; [
       xray

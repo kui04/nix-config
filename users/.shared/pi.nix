@@ -2,8 +2,10 @@
   config,
   pkgs,
   ...
-}: let
-in {
+}:
+let
+in
+{
   programs.pi.coding-agent.enable = true;
   programs.pi.coding-agent.settings = {
     packages = [
@@ -21,7 +23,7 @@ in {
       "npm:pi-subagents-lite"
     ];
 
-    extensions = [];
+    extensions = [ ];
 
     defaultThinkingLevel = "xhigh";
     followUpMode = "all";

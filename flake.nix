@@ -32,65 +32,82 @@
     pi.inputs.nixpkgs.follows = "nixpkgs-unstable";
   };
 
-  outputs = inputs @ {
-    self,
-    nixpkgs,
-    home-manager,
-    ...
-  }: {
-    formatter.x86_64-linux = nixpkgs.legacyPackages.x86_64-linux.alejandra;
-
-    nixosConfigurations.thinkbook = nixpkgs.lib.nixosSystem {
-      system = "x86_64-linux";
-      specialArgs = {
-        inherit inputs;
-        username = "kui04";
-        hostname = "thinkbook";
-      };
-
-      modules = [
-        ./hosts/thinkbook
-
-        # agenix module for managing secrets
-        inputs.agenix.nixosModules.default
-
-        # home-manager module
-        home-manager.nixosModules.home-manager
-        {
-          home-manager.useGlobalPkgs = true;
-          home-manager.useUserPackages = true;
-
-          home-manager.extraSpecialArgs = {
-            inherit inputs;
-            username = "kui04";
-            hostname = "thinkbook";
+  outputs =
+    inputs@{
+      self,
+      nixpkgs,
+      home-manager,
+      ...
+    }:
+    {
+      formatter.x86_64-linux = nixpkgs.legacyPackages.x86_64-linux.nixfmt-tree.override {
+        settings = {
+          formatter.shfmt = {
+            command = "shfmt";
+            options = [
+              "-w"
+              "-i"
+              "4"
+            ];
+            includes = [ "*.sh" ];
           };
-          home-manager.users."kui04".imports = [
-            ./users/kui04
-
-            inputs.nix-flatpak.homeManagerModules.nix-flatpak
-            inputs.stylix.homeModules.stylix
-            inputs.pi.homeModules.default
-          ];
-        }
-      ];
-    };
-    # this is actually a root user configuration for the vps, but I don't want to name it "root" to avoid confusion
-    homeConfigurations.fkgfw = home-manager.lib.homeManagerConfiguration {
-      pkgs = inputs.nixpkgs.legacyPackages.x86_64-linux;
-
-      extraSpecialArgs = {
-        username = "root";
-        homeDirectory = "/root";
-        flakeRootPath = ./.;
-        agenix = inputs.agenix;
+        };
+        runtimeInputs = [
+          nixpkgs.legacyPackages.x86_64-linux.shfmt
+        ];
       };
 
-      modules = [
-        ./users/fkgfw
+      nixosConfigurations.thinkbook = nixpkgs.lib.nixosSystem {
+        system = "x86_64-linux";
+        specialArgs = {
+          inherit inputs;
+          username = "kui04";
+          hostname = "thinkbook";
+        };
 
-        inputs.agenix.homeManagerModules.default
-      ];
+        modules = [
+          ./hosts/thinkbook
+
+          # agenix module for managing secrets
+          inputs.agenix.nixosModules.default
+
+          # home-manager module
+          home-manager.nixosModules.home-manager
+          {
+            home-manager.useGlobalPkgs = true;
+            home-manager.useUserPackages = true;
+
+            home-manager.extraSpecialArgs = {
+              inherit inputs;
+              username = "kui04";
+              hostname = "thinkbook";
+            };
+            home-manager.users."kui04".imports = [
+              ./users/kui04
+
+              inputs.nix-flatpak.homeManagerModules.nix-flatpak
+              inputs.stylix.homeModules.stylix
+              inputs.pi.homeModules.default
+            ];
+          }
+        ];
+      };
+      # this is actually a root user configuration for the vps, but I don't want to name it "root" to avoid confusion
+      homeConfigurations.fkgfw = home-manager.lib.homeManagerConfiguration {
+        pkgs = inputs.nixpkgs.legacyPackages.x86_64-linux;
+
+        extraSpecialArgs = {
+          username = "root";
+          homeDirectory = "/root";
+          flakeRootPath = ./.;
+          agenix = inputs.agenix;
+        };
+
+        modules = [
+          ./users/fkgfw
+
+          inputs.agenix.homeManagerModules.default
+        ];
+      };
     };
-  };
 }

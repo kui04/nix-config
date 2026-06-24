@@ -3,9 +3,11 @@
   lib,
   pkgs,
   ...
-}: let
+}:
+let
   homeDirectory = config.home.homeDirectory;
-in {
+in
+{
   home.file = {
     # flatpak font/icon fixes
     # ".local/share/fonts".source = mkOutOfStoreSymlink "/run/current-system/sw/share/X11/fonts";

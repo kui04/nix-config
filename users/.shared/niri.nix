@@ -1,4 +1,4 @@
-{pkgs, ...}: {
+{ pkgs, ... }: {
   # polkit angent
   services.polkit-gnome.enable = true;
   services.network-manager-applet.enable = true;

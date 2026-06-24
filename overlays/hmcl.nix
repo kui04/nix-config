@@ -2,7 +2,7 @@ final: prev: {
   hmcl = prev.hmcl.override {
     minecraftJdks = [
       # JavaFX runtime (main HMCL launcher runtime)
-      (prev.jdk.override {enableJavaFX = true;})
+      (prev.jdk.override { enableJavaFX = true; })
       # For MC 1.12.2 and below
       prev.jdk8
       # For MC 1.17+

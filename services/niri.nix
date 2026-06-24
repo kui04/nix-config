@@ -2,10 +2,11 @@
   pkgs,
   username,
   ...
-}: {
+}:
+{
   programs.niri.enable = true;
   programs.niri.package = pkgs.unstable.niri;
-  users.users.${username}.extraGroups = ["input"];
+  users.users.${username}.extraGroups = [ "input" ];
 
   programs.niri.useNautilus = true;
   programs.nautilus-open-any-terminal = {

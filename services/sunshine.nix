@@ -1,4 +1,4 @@
-{username, ...}: {
+{ username, ... }: {
   config = {
     # related issue: https://github.com/NixOS/nixpkgs/issues/455737
     hardware.uinput.enable = true;

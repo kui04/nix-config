@@ -1,4 +1,4 @@
-{pkgs, ...}: {
+{ pkgs, ... }: {
   # fcitx5 environment variables
   home.sessionVariables = {
     # GTK_IM_MODULE = "fcitx";
