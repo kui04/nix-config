@@ -37,7 +37,7 @@ in
       unstable.hmcl
       unstable.ollama-cuda
       unstable.opencode
-      unstable.vscode-fhs
+      unstable.vscode
       unstable.zellij
       unstable.zed-editor
     ];
