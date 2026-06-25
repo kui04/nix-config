@@ -30,6 +30,10 @@
     # unoffical nix flake for [pi](https://github.com/earendil-works/pi)
     pi.url = "github:lukasl-dev/pi.nix";
     pi.inputs.nixpkgs.follows = "nixpkgs-unstable";
+
+    # run unpatched dynamic binaries on NixOS
+    nix-ld.url = "github:Mic92/nix-ld";
+    nix-ld.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs =
@@ -68,10 +72,9 @@
         modules = [
           ./hosts/thinkbook
 
-          # agenix module for managing secrets
           inputs.agenix.nixosModules.default
+          inputs.nix-ld.nixosModules.nix-ld
 
-          # home-manager module
           home-manager.nixosModules.home-manager
           {
             home-manager.useGlobalPkgs = true;

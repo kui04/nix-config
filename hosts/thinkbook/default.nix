@@ -83,6 +83,8 @@
   programs.obs-studio.enableVirtualCamera = true;
   # for promptless recording on both cli and gui
   programs.gpu-screen-recorder.enable = true;
+  # nix-ld
+  programs.nix-ld.dev.enable = true;
 
   # define a user account. don't forget to set a password with 'passwd'.
   users.users.${username} = {
