@@ -12,7 +12,6 @@ in
     ../.shared/fcitx5.nix
     ../.shared/niri.nix
     ../.shared/stylix.nix
-    ../.shared/pi.nix
   ];
 
   home = {
@@ -36,10 +35,13 @@ in
       unstable.antigravity
       unstable.hmcl
       unstable.ollama-cuda
-      unstable.opencode
       unstable.vscode
       unstable.zellij
       unstable.zed-editor
+      # coding agents
+      llm-agents.codex
+      llm-agents.opencode
+      llm-agents.pi
     ];
   };
 

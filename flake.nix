@@ -24,12 +24,8 @@
     # chinese fonts from windows iso
     chinese-fonts.url = "github:brsvh/chinese-fonts-overlay/main";
 
-    # latest opencode from official repo
-    opencode.url = "github:sst/opencode/v1.15.4";
-
-    # unoffical nix flake for [pi](https://github.com/earendil-works/pi)
-    pi.url = "github:lukasl-dev/pi.nix";
-    pi.inputs.nixpkgs.follows = "nixpkgs-unstable";
+    # ai coding agents and development tools
+    llm-agents.url = "github:numtide/llm-agents.nix";
 
     # run unpatched dynamic binaries on NixOS
     nix-ld.url = "github:Mic92/nix-ld";
@@ -90,7 +86,6 @@
 
               inputs.nix-flatpak.homeManagerModules.nix-flatpak
               inputs.stylix.homeModules.stylix
-              inputs.pi.homeModules.default
             ];
           }
         ];
