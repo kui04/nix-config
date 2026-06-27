@@ -1,6 +1,7 @@
 {
   inputs,
   pkgs,
+  lib,
   username,
   ...
 }:
@@ -203,6 +204,9 @@
 
   # systemd services
   systemd.services.NetworkManager-wait-online.enable = false;
+
+  # create_ap: don't auto-start, start manually with: sudo systemctl start create_ap
+  systemd.services.create_ap.wantedBy = lib.mkForce [ ];
 
   # This value determines the NixOS release from which the default
   # settings for stateful data, like file locations and database versions
