@@ -61,6 +61,7 @@
     android-tools
     busybox
     cachix
+    dnsmasq # needed for the default libvirt network
     fd
     file
     git
@@ -92,6 +93,7 @@
       "networkmanager"
       "wheel"
       "docker"
+      "libvirtd"
     ];
   };
 
@@ -130,15 +132,25 @@
     "zswap.pool=zsmalloc" # zswap backend to use
   ];
 
-  # virtualization
+  # docker
   virtualisation.docker.enable = true;
-  virtualisation.virtualbox.host.enable = true;
-  virtualisation.virtualbox.host.enableExtensionPack = true;
-  virtualisation.virtualbox.guest.enable = true;
-  virtualisation.virtualbox.guest.dragAndDrop = true;
-  users.extraGroups.vboxusers.members = [ username ];
+
   # nvidia-container-toolkit for GPU passthrough in docker
   hardware.nvidia-container-toolkit.enable = true;
+
+  # libvirtd
+  virtualisation.libvirtd = {
+    enable = true;
+    # shared folders
+    qemu.vhostUserPackages = with pkgs; [ virtiofsd ];
+  };
+  # virt-manager
+  programs.virt-manager.enable = true;
+  # spice guest vdagent daemon
+  services.spice-vdagentd.enable = true;
+
+  # allow it through firewall filter
+  networking.firewall.trustedInterfaces = [ "virbr0" ];
 
   # graphics
   hardware.graphics.enable = true;
