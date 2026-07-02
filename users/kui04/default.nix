@@ -74,9 +74,7 @@ in
   ];
 
   # bash shell
-  programs.fastfetch.enable = true;
   programs.bash.enable = true;
-  programs.bash.initExtra = "fastfetch -l windows";
   programs.bash.shellAliases = {
     clean = "sudo nix-collect-garbage -d";
     nv = "nvidia-offload";
