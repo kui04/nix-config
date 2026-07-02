@@ -21,6 +21,7 @@ in
 
     packages = with pkgs; [
       chromium
+      codegraph
       conda
       entr
       ffmpeg-full
@@ -35,6 +36,7 @@ in
       unstable.antigravity
       unstable.hmcl
       unstable.ollama-cuda
+      unstable.rtk
       unstable.vscode
       unstable.zellij
       unstable.zed-editor
