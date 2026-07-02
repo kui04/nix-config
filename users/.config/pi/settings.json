@@ -1,0 +1,15 @@
+{
+  "packages": [
+    "npm:pi-ask-user",
+    "npm:pi-hashline-edit",
+    "npm:pi-markdown-preview",
+    "npm:pi-mcp-adapter",
+    "npm:pi-subagents-lite"
+  ],
+  "defaultThinkingLevel": "xhigh",
+  "followUpMode": "all",
+  "quietStartup": true,
+  "steeringMode": "all",
+  "httpIdleTimeoutMs": 60000,
+  "npmCommand": ["npm"]
+}

@@ -5,7 +5,8 @@
 
     # unstable package overlays
     overlays = [
-      # inputs.opencode.overlays.default
+      (import ./codegraph.nix)
+      (import ./hmcl.nix)
     ];
   };
 }

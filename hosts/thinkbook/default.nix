@@ -51,8 +51,6 @@
   nixpkgs.overlays = [
     inputs.chinese-fonts.overlays.default
     inputs.llm-agents.overlays.default
-    (import ../../overlays/codegraph.nix)
-    (import ../../overlays/hmcl.nix)
     (import ../../overlays/pkgs-unstable.nix { inherit inputs; })
   ];
 

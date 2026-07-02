@@ -12,6 +12,7 @@ in
     ../.shared/fcitx5.nix
     ../.shared/niri.nix
     ../.shared/stylix.nix
+    ../.shared/pi.nix
   ];
 
   home = {
@@ -21,11 +22,11 @@ in
 
     packages = with pkgs; [
       chromium
-      codegraph
       conda
       entr
       ffmpeg-full
       gnome-system-monitor
+      llm-agents.opencode
       lm_sensors
       mission-center
       qemu
@@ -35,15 +36,9 @@ in
       # from unstable
       unstable.antigravity
       unstable.hmcl
-      unstable.ollama-cuda
-      unstable.rtk
       unstable.vscode
       unstable.zellij
       unstable.zed-editor
-      # coding agents
-      llm-agents.codex
-      llm-agents.opencode
-      llm-agents.pi
     ];
   };
 
