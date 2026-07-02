@@ -28,8 +28,6 @@ export class Footer implements Component {
 		const dimLine = thm.fg("dim", "─".repeat(width));
 
 		// Compute token stats from session branch
-		let totalInput = 0;
-		let totalOutput = 0;
 		let totalCacheRead = 0;
 		let totalCacheWrite = 0;
 		let totalCost = 0;
@@ -37,8 +35,6 @@ export class Footer implements Component {
 		for (const entry of this.ctx.sessionManager.getBranch()) {
 			if (entry.type === "message" && entry.message.role === "assistant") {
 				const msg = entry.message as AssistantMessage;
-				totalInput += msg.usage.input;
-				totalOutput += msg.usage.output;
 				totalCacheRead += msg.usage.cacheRead;
 				totalCacheWrite += msg.usage.cacheWrite;
 				totalCost += msg.usage.cost.total;
@@ -57,7 +53,6 @@ export class Footer implements Component {
 		const contextTotalStr = contextWindow != null ? fmtTokens(contextWindow) : "?";
 
 		// Build content segments
-		const accentBar = thm.fg("accent", "│");
 		const separator = thm.fg("dim", " │ ");
 
 		// Extension statuses from other extensions (lowercase)
@@ -68,13 +63,11 @@ export class Footer implements Component {
 
 		// Info segments
 		const ctxTokens = `${contextUsedStr}/${contextTotalStr}`;
-		const inputTokens = `↑ ${fmtTokens(totalInput)}`;
-		const outputTokens = `↓ ${fmtTokens(totalOutput)}`;
 		const cacheHit = `${(latestCacheHitRate ?? 0).toFixed(1)}% CH`;
 		const cost = `$${totalCost.toFixed(3)}`;
 
-		// Core parts (always visible): ctxTokens │ inputTokens │ outputTokens │ cacheHit │ cost
-		const coreParts = [ctxTokens, inputTokens, outputTokens, cacheHit, thm.fg("warning", cost)];
+		// Core parts (always visible): ctxTokens │ cacheHit │ cost
+		const coreParts = [ctxTokens, cacheHit, thm.fg("warning", cost)];
 		const coreRight = coreParts.join(separator);
 		const coreRightWidth = visibleWidth(coreRight);
 
@@ -86,7 +79,7 @@ export class Footer implements Component {
 		// HOME → ~ replacement (safe resolve/relative approach)
 		const home = process.env.HOME || process.env.USERPROFILE;
 		const cwd = homeRelativePath(this.ctx.cwd, home);
-		const cwdStyled = `${accentBar} ${cwd}`;
+		const cwdStyled = ` ${cwd}`;
 		const cwdWidth = visibleWidth(cwdStyled);
 
 		// Layout within contentWidth = width - 1 (1 cell right padding)

@@ -48,7 +48,7 @@ export class TuiEditor extends CustomEditor {
 			return lines;
 		}
 
-		const innerWidth = width - 2;
+		const innerWidth = width - 1;
 		const rendered = super.render(innerWidth);
 
 		if (rendered.length < 2) {
@@ -59,8 +59,7 @@ export class TuiEditor extends CustomEditor {
 
 		const thm = this.uiTheme;
 		const dimDash = thm.fg("dim", "─");
-		const rail = `${thm.fg("accent", "│")} `;
-
+		const pad = " ";
 		// Extract overflow indicators from base editor's borders
 		const topLine = rendered[0];
 		const bottomLine = rendered[rendered.length - 1];
@@ -92,7 +91,7 @@ export class TuiEditor extends CustomEditor {
 
 		const result = [
 			topBorder,
-			...lines.map((line) => `${rail}${this.fillLine(line, innerWidth)}`),
+			...lines.map((line) => `${pad}${this.fillLine(line, innerWidth)}`),
 			bottomBorder,
 		];
 
