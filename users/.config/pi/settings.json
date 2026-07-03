@@ -1,9 +1,10 @@
 {
   "packages": [
+    "npm:@upstash/context7-pi",
     "npm:pi-ask-user",
     "npm:pi-hashline-edit",
-    "npm:pi-markdown-preview",
     "npm:pi-mcp-adapter",
+    "npm:pi-permission-system",
     "npm:pi-subagents-lite"
   ],
   "defaultThinkingLevel": "xhigh",

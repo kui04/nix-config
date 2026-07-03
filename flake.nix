@@ -30,6 +30,9 @@
     # run unpatched dynamic binaries on NixOS
     nix-ld.url = "github:Mic92/nix-ld";
     nix-ld.inputs.nixpkgs.follows = "nixpkgs";
+
+    # a GNU screen style terminal multiplexer built on libghostty
+    boo.url = "github:coder/boo";
   };
 
   outputs =

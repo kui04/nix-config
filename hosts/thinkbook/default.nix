@@ -66,6 +66,7 @@
     git
     gnumake
     inputs.agenix.packages.${stdenv.hostPlatform.system}.default
+    inputs.boo.packages.${stdenv.hostPlatform.system}.default
     neovim
     nil
     pciutils
