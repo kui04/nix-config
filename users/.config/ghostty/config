@@ -15,6 +15,9 @@ window-titlebar-foreground = #EEFFFF
 
 macos-titlebar-style = transparent
 
+window-decoration = none 
+gtk-titlebar = false
+
 font-family = Sarasa Term SC
 # base01
 palette = 0=#303030
