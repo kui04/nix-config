@@ -1,6 +1,5 @@
 {
   "packages": [
-    "npm:@upstash/context7-pi",
     "npm:pi-ask-user",
     "npm:pi-hashline-edit",
     "npm:pi-mcp-adapter",

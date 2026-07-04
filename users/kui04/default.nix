@@ -42,6 +42,9 @@ in
     ];
   };
 
+  # xdg user dirs
+  xdg.userDirs.enable = true;
+
   services.flatpak.packages = [
     "com.getpostman.Postman"
     "com.github.gmg137.netease-cloud-music-gtk"

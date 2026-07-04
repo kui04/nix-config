@@ -55,6 +55,7 @@ in
   home.file.".pi/agent/extensions".source = "${config}/extensions";
   home.file.".pi/agent/skills".source = "${config}/skills";
   home.file.".pi/agent/pi-permissions.jsonc".source = "${config}/pi-permissions.jsonc";
+  home.file."Templates/pi-mcp.json".source = "${config}/mcp-template.json";
 
   home.activation.cleanPiNpm = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     npm_root="$HOME/.pi/agent/npm"

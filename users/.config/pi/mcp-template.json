@@ -1,0 +1,41 @@
+{
+  "mcpServers": {
+    "chrome-devtools": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "chrome-devtools-mcp@latest",
+        "--browser-url=http://127.0.0.1:9222"
+      ],
+      "lifecycle": "lazy"
+    },
+    "codegraph": {
+      "command": "codegraph",
+      "args": [
+        "serve",
+        "--mcp"
+      ],
+      "lifecycle": "lazy"
+    },
+    "context7": {
+      "url": "https://mcp.context7.com/mcp",
+      "auth": "bearer",
+      "header": {
+        "CONTEXT7_API_KEY": "YOUR_CONTEXT7_API_KEY"
+      },
+      "lifecycle": "lazy"
+    },
+    "github": {
+      "url": "https://api.githubcopilot.com/mcp/",
+      "auth": "bearer",
+      "headers": {
+        "Authorization": "YOUR_GITHUB_PAT"
+      },
+      "lifecycle": "lazy"
+    },
+    "tavily": {
+      "url": "https://mcp.tavily.com/mcp/?tavilyApiKey=YOUR_TAVILY_API_KEY",
+      "lifecycle": "keep-alive"
+    }
+  }
+}
