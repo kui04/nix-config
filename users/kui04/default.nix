@@ -26,7 +26,6 @@ in
       entr
       ffmpeg-full
       gnome-system-monitor
-      llm-agents.opencode
       lm_sensors
       mission-center
       qemu
@@ -44,6 +43,7 @@ in
 
   # xdg user dirs
   xdg.userDirs.enable = true;
+  xdg.userDirs.setSessionVariables = true;
 
   services.flatpak.packages = [
     "com.getpostman.Postman"

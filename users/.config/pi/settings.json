@@ -4,7 +4,7 @@
     "npm:pi-hashline-edit",
     "npm:pi-mcp-adapter",
     "npm:pi-permission-system",
-    "npm:pi-subagents-lite"
+    "npm:pi-zentui"
   ],
   "defaultThinkingLevel": "xhigh",
   "followUpMode": "all",
