@@ -23,9 +23,11 @@ in
     packages = with pkgs; [
       chromium
       conda
+      devenv
       entr
       ffmpeg-full
       gnome-system-monitor
+      llm-agents.opencode
       lm_sensors
       mission-center
       qemu
@@ -102,4 +104,9 @@ in
   # direnv
   programs.direnv.enable = true;
   programs.direnv.enableBashIntegration = true;
+
+  # atuin
+  programs.atuin.enable = true;
+  programs.atuin.daemon.enable = true;
+  programs.atuin.enableBashIntegration = true;
 }

@@ -25,6 +25,23 @@
       },
       "lifecycle": "lazy"
     },
+    "devenv": {
+      "command": "devenv",
+      "args": [
+        "mcp"
+      ],
+      "lifecycle": "lazy"
+    },
+    "fetch": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "mcp/fetch"
+      ],
+      "lifecycle": "keep-alive"
+    },
     "github": {
       "url": "https://api.githubcopilot.com/mcp/",
       "auth": "bearer",
@@ -35,7 +52,7 @@
     },
     "tavily": {
       "url": "https://mcp.tavily.com/mcp/?tavilyApiKey=YOUR_TAVILY_API_KEY",
-      "lifecycle": "keep-alive"
+      "lifecycle": "lazy"
     }
   }
 }

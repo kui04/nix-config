@@ -11,6 +11,7 @@ let
     export PATH="${
       lib.makeBinPath [
         pkgs.nodejs
+        pkgs.lua
         pkgs.git
       ]
     }:$PATH"
@@ -50,6 +51,7 @@ in
     unstable.codegraph
     unstable.rtk
     unstable.ollama-cuda
+    unstable.openspec
   ];
 
   home.file.".pi/agent/extensions".source = "${config}/extensions";
