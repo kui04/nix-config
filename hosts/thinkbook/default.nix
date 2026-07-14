@@ -50,7 +50,7 @@
   # overlays
   nixpkgs.overlays = [
     inputs.chinese-fonts.overlays.default
-    inputs.llm-agents.overlays.default
+    inputs.llm-agents.overlays.shared-nixpkgs
     (import ../../overlays/pkgs-unstable.nix { inherit inputs; })
   ];
 
