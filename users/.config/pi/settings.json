@@ -3,6 +3,7 @@
     "npm:pi-ask-user",
     "npm:pi-hashline-edit",
     "npm:pi-mcp-adapter",
+    "npm:pi-observational-memory",
     "npm:pi-permission-system",
     "npm:pi-zentui"
   ],

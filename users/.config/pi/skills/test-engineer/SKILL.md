@@ -18,8 +18,8 @@ The steps below mirror the fundamental test process from the ISTQB Foundation sy
 Maintaining a hardcoded map of every language's testing ecosystem isn't this skill's job — it would go stale immediately and it's the opposite of being framework-agnostic. Instead of silently scanning the repo and guessing:
 
 - If this skill was invoked with an argument naming a framework or tool, treat that as authoritative.
-- Otherwise, check whether the user or the conversation has already named the test framework, runner, or assertion/mocking library, **or scan the project for them yourself**: look at the manifest (`package.json`, `pyproject.toml` / `requirements.txt`, `Cargo.toml`, `go.mod`, `pom.xml`, `*.csproj`, etc.), the existing test directory's conventions, and the imports in the code under test. The point of being framework-agnostic is to match the *project's* actual stack, not to ask what that stack is.
-- Only ask the user directly when the project is genuinely greenfield (no manifest, no tests, no signal in the conversation) or there's real ambiguity between multiple coexisting setups — don't ask reflexively when a 5-second file check would answer it.
+- Otherwise, check whether the user or the conversation has already named the test framework, runner, or assertion/mocking library, or pointed you at a manifest/lockfile/existing test directory.
+- If it's still unclear, ask directly which test framework, runner, and assertion/mocking library the project uses (or should use, for a new project) — don't guess or silently default.
 
 Once the framework is known: if it's unfamiliar to you, or a newer/less common tool (e.g. `cargo-nextest`, a niche framework version, an internal harness), look up its documentation (web search, its own README, or `--help` output) before writing any test code — don't invent syntax. Then match the project's existing naming conventions, file layout, and assertion/mocking style, or the framework's own idiomatic conventions if there's nothing to match yet.
 
@@ -66,20 +66,24 @@ Read `references/test-doubles-and-quality.md` for the precise Dummy/Fake/Stub/Sp
 ### Step 5 — Close the loop
 
 - If the code under test has **no existing tests at all**, write characterization tests first (Michael Feathers, *Working Effectively with Legacy Code*) to pin down its actual current behavior, before refactoring or extending it — don't assume what it "should" do when nothing documents that yet.
-- If you can run the relevant test(s) in this environment, run them and fix failures before handing back the result.
+- If you can run the relevant test(s) in this environment, run them. When a test fails, follow the diagnosis procedure below before changing anything — do not edit a test just to make it pass.
 - Call out coverage gaps you noticed but deliberately didn't fill (e.g. "I didn't add E2E coverage for X because Y — want me to?"), rather than silently deciding the scope of testing on the user's behalf.
 
-## Output
+## When a test fails: diagnose before you touch the test
 
-When asked to **write tests**, deliver in this order:
-1. A short test plan (1–3 bullets: which kinds of tests, why those, what you deliberately skipped).
-2. The test code, following the project's existing conventions and using the framework you identified in Step 1.
-3. A short gap note ("I didn't add E2E for X because Y — want me to?") rather than silently deciding scope.
+This is the single most common way this skill goes wrong in practice: a test fails, and the response becomes "edit the test until it's green" instead of "find out why it failed." A test's expected result — its *oracle* — is supposed to come from the specification or the user's actual intent, not from whatever the code currently happens to output (see Barr, Harman, McMinn, Bowes & Yoo, *"The Oracle Problem in Software Testing: A Survey"*, IEEE TSE, for the formal treatment of this). Treating the test as the thing to adjust, rather than the code, quietly breaks that guarantee and defeats the entire purpose of having the test.
 
-When asked to **review tests or coverage**, deliver:
-- Findings as a numbered list, severity-ranked (critical / important / nit).
-- Each finding references a specific `file:line` and explains *why* it matters, not just *what's wrong*.
-- A short suggested fix (code snippet or diff) for each finding.
+When a test fails, work through this in order — don't skip ahead to editing the test:
+
+1. **Read the actual failure first** — the assertion message, the diff, the stack trace. Understand exactly what was expected vs. what happened, before touching anything.
+2. **Form a hypothesis for *why* it failed.** It's almost always one of:
+   - a genuine bug in the production code → fix the code, not the test;
+   - a wrong or stale expectation in the test itself → fix the test, but only after confirming what the *correct* behavior actually is against the spec/requirements/user intent — never against "whatever the code currently does";
+   - an environment or flakiness issue (a real timing/ordering/shared-state problem) → fix the root cause, don't paper over it with a longer timeout or a blind retry;
+   - a genuine, intentional behavior change that the test correctly caught → this is a product decision, so confirm with the user before updating the test's expectation.
+3. **Never take any of these actions purely to reach green**, without first having identified which case above actually applies: loosening an assertion (exact match → "is truthy"/"contains"), deleting or commenting out a failing assertion, catching/swallowing the exception the test was checking for, increasing a timeout or adding a retry loop until it happens to pass, or changing an expected value to match the actual output without verifying the actual output is correct.
+4. **When genuinely unsure** whether a failure reflects a real bug or a wrong test expectation, say so and ask — don't pick silently.
+5. **State the outcome explicitly, either way** — "this failed because of a bug in the code, which I fixed" or "this failed because the test's expectation was wrong: it assumed X, but the actual requirement is Y, so I updated the expected value" — never hand back a green test suite with a silent diff and no explanation of what changed or why.
 
 ## Quick reference — the pyramid
 
@@ -89,7 +93,5 @@ When asked to **review tests or coverage**, deliver:
 | Integration | a few real collaborators | some (e.g. containerized DB), external services faked | seconds | ~20% |
 | Component/UI | one rendered component | test renderer only | ms–seconds | (frontend-specific layer) |
 | E2E / UI journey | full user journey | everything real | seconds–minutes | ~5–10%, kept deliberately few |
-
-These ratios are rough defaults from Mike Cohn's pyramid, not hard rules. A data-pipeline service will legitimately lean heavier on integration tests; a component-heavy frontend will have a thicker component-test layer. Adjust the shape to the project's actual risk profile, and say so explicitly when you deviate.
 
 See `references/test-types.md`, `references/test-design-techniques.md`, and `references/test-doubles-and-quality.md` for full depth on each step above.
