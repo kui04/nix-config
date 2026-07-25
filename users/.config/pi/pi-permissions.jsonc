@@ -23,7 +23,6 @@
         "*":                                         "ask",
         "ag *":                                      "allow",
         "bat *":                                     "allow",
-        "boo *":                                     "allow",
         "btm":                                       "allow",
         "cat *":                                     "allow",
         "curl *":                                    "allow",
