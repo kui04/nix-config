@@ -7,10 +7,23 @@
     "npm:pi-permission-system",
     "npm:pi-zentui"
   ],
-  "defaultThinkingLevel": "xhigh",
+
   "followUpMode": "all",
   "quietStartup": true,
   "steeringMode": "all",
   "httpIdleTimeoutMs": 60000,
-  "npmCommand": ["npm"]
+  "npmCommand": ["npm"],
+  
+  "observational-memory": {
+    "observeAfterTokens": 10000,
+    "reflectAfterTokens": 20000,
+    "compactAfterTokens": 81000,
+    "compactAfterTokensMode": "ratio",
+    "compactAfterTokensRatio": 0.618,
+    "observationsPoolMaxTokens": 20000,
+    "observationsPoolTargetTokens": 10000,
+    "agentMaxTurns": 16,
+    "passive": false,
+    "debugLog": false
+  }
 }
