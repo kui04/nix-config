@@ -34,7 +34,6 @@
       noto-fonts-color-emoji
       font-awesome
       sarasa-gothic
-      windows-fonts
     ];
 
     fonts.fontconfig = {
