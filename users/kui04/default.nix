@@ -35,11 +35,11 @@ in
       ripgrep
       vlc
       # from unstable
-      unstable.antigravity
       unstable.hmcl
       unstable.vscode
       unstable.zellij
       unstable.zed-editor
+      unstable.helix
     ];
   };
 
