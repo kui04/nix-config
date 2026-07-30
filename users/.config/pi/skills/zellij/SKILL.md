@@ -1,191 +1,253 @@
 ---
 name: zellij
-description: Drives the Zellij terminal multiplexer to run long-lived and background tasks, control interactive REPLs (python, ipython, node, lldb, gdb, sqlite3, etc.), and operate other machines over SSH, all from non-interactive commands instead of a single blocking shell call. Use whenever work must keep running after this turn ends, needs several rounds of interactive input/output, or drives a shell/REPL on a remote host through ssh. Do not use it for a one-shot command that finishes immediately on its own.
+description: Runs any command whose duration is long, unknown, or open-ended inside a Zellij tab instead of a single blocking, timeout-bound bash call — builds, installs, test suites, migrations, data/training jobs, servers, and watch/follow loops all fall into this by nature, not because of their specific names. Also drives interactive REPLs (python, ipython, node, lldb, gdb, sqlite3, etc.) and remote machines over ssh across multiple rounds of input/output. If pi is itself running inside a Zellij session, tasks land in a new, named tab of that same session so the user can watch live without their view being disrupted; otherwise a detached background session is used. Prefer this over raising a bash timeout when a command's runtime isn't confidently short, reach for this skill up front, not after a timeout failure.
 license: MIT
 ---
 
-# Zellij Tasks
+# Zellij
 
-Zellij is a terminal multiplexer. Every one of its features is reachable from
-the command line via `zellij action <subcommand>`, so it can be driven
-entirely by scripted commands with no human ever attaching to it. This skill
-treats Zellij as a durable "task backend": start something in a pane, keep
-going with other work, and come back to check on it or feed it more input.
+Zellij is a terminal multiplexer, fully controllable from the command line
+via `zellij action <subcommand>`. This skill treats it as a durable "task
+backend": start something in its own named tab, keep doing other work, and
+come back to read its output or feed it more input — without blocking a
+tool call on it, and without a human needing to attach anything by hand.
 
-## When to use this
+## Use this instead of a bigger timeout
 
-- A task will outlive this turn (dev server, watch/build loop, long
-  training/indexing job, `tail -f`, a monitor).
-- A task needs an open interactive process fed with several rounds of input
-  (a Python/IPython/Node REPL, `lldb`/`gdb`, `sqlite3`, `psql`, a Rails/Django
+Don't respond to a bash command timing out by re-running it with a larger
+number — that's a symptom, not a fix. The signal to act on is simpler than
+any list of specific tools: **if you can't confidently say a command will
+finish in well under a minute, or it's designed to keep running
+indefinitely (a server, a watch/follow mode), start it in a tab instead of
+guessing a timeout.** Builds, installs, test suites, migrations, data or
+training jobs, and large network transfers tend to fall into this — not
+because those particular words are magic, but because their actual runtime
+is inherently variable and you usually can't know it in advance. Judge by
+whether the duration is knowable and short, not by whether the command
+matches a known pattern.
+
+The upside isn't just "it won't get killed" — the command keeps running in
+the background while you do other things, and you (or the user) can check
+on it, or intervene, at any point without losing output.
+
+## Also use this for
+
+- Interactive REPLs that need several rounds of input
+  (python/ipython/node, `lldb`/`gdb`, `sqlite3`, `psql`, a Rails/Django
   shell...).
-- A task means controlling another machine over `ssh` — running commands,
-  reading results, handling a follow-up prompt — where a single `ssh host
-  "cmd"` call isn't enough because the session needs to stay open.
-- Several of the above need to happen at once (parallel builds, checking a
+- Controlling another machine over `ssh` where a single `ssh host "cmd"`
+  call isn't enough because the session needs to stay open across several
+  commands.
+- Several of the above running at once (parallel builds, checking a
   handful of hosts).
-
-Skip this for anything that finishes in one shot — just run it directly.
 
 ## Mental model
 
-- **One Zellij session per project/task context.** Create it once with
-  `zellij attach --create-background <name>` and reuse it across every later
-  command in this conversation (and even across separate turns, since the
-  session keeps running in the background independent of this agent process).
-- **One pane per task.** Pane- and tab-creating commands print the created
-  ID (`terminal_N`) to stdout — capture it and address that pane directly
-  with `--pane-id` from then on. Never rely on "whatever pane currently has
-  focus"; there is no human moving focus around.
-- **Three primitives cover everything:**
-  1. **Launch** — start the pane's own process directly:
-     `new-pane -- <command>`. Best when there is exactly one command to run,
-     because it sidesteps shell-quoting entirely and its exit status becomes
-     queryable/blockable.
-  2. **Feed** — send text into a pane that is already running a shell or a
-     REPL: `action paste --pane-id <id> "<text>"` followed by
-     `action send-keys --pane-id <id> "Enter"` (`paste` alone does not press
-     Enter).
-  3. **Read** — `action dump-screen --pane-id <id>` for a one-shot snapshot
-     of the current viewport (`--full` for scrollback too), or
-     `zellij subscribe --pane-id <id> --format json` to stream changes live.
-- **Never invoke bare `zellij`** (the interactive TUI) as a tool call — there
-  is no terminal for it to attach to. Always go through
-  `zellij attach --create-background` to create/ensure a session, and
-  `zellij action ...` / `zellij --session <name> action ...` to control it.
+- **One task = one tab, addressed by name — never a split pane.**
+  `scripts/spawn.sh` always opens a brand-new tab, named whatever you give
+  it (`"build"`, `"background"`, `"py"`, ...), whose sole pane *is* the
+  command. No leftover idle pane splitting the view next to it.
+- **Address everything by (session, tab name), not by numeric ID.** IDs
+  captured in one command may not survive into your *next* tool call —
+  don't rely on a `$PANE_ID` shell variable still being set later. Instead,
+  every read/write/wait script here takes the tab's **name** and
+  re-resolves its pane fresh, every time, via `scripts/pane-for-tab.sh`.
+  The only things you need to remember across turns are two short strings:
+  the session name and the tab name you chose — trivial to just restate.
+  If two tasks ever share a name, the most recently created one wins; use
+  distinct names (`"build-frontend"`, `"build-backend"`) to keep two things
+  addressable at once.
+- **Reuse the session you're already in, if there is one.** If pi is
+  itself running inside a Zellij pane, `$ZELLIJ`/`$ZELLIJ_SESSION_NAME` are
+  set. `scripts/current-or-new-session.sh` detects this and targets that
+  same session, so a spawned task shows up as a tab right there in the
+  user's own terminal — they can switch to it and watch, or start typing
+  into it themselves. Only when pi is *not* nested in Zellij does it fall
+  back to a separate detached background session.
+- **Spawning a tab doesn't disrupt whatever the user is looking at.**
+  Creating a tab does switch focus to it for a moment (Zellij has no
+  "create in background" flag) — `spawn.sh` immediately jumps focus back to
+  whatever tab was active before, so the net effect is invisible. The task
+  keeps running regardless of which tab has focus; reading/writing by
+  `--pane-id` never depends on focus either (verified: `dump-screen
+  --pane-id` returns the target pane's real content even while a different
+  tab is focused).
+- **Never invoke bare `zellij`** (the interactive TUI) as a tool call —
+  there's no terminal for it to attach to. Always go through the wrapper
+  scripts below, or `zellij action ...` / `zellij --session <name> action
+  ...` directly.
 
 ## Setup (once per environment)
 
 ```bash
-zellij --version    # confirm it's installed
+zellij --version    # confirm it's installed; jq is also required by the scripts
 ```
 
-Pick one session name per logical project/task and stick to it, e.g.
-`pi-$(basename "$PWD")`. `scripts/session.sh` creates it if missing and is a
-no-op if it's already running, so it's safe to call at the start of every
-recipe below.
+The very first time Zellij ever creates a session on a machine (and again
+right after a Zellij upgrade), it can pop up a "First Run Setup Wizard" or
+"Release Notes" overlay as a focused floating pane in the default tab. It's
+harmless to a named-tab workflow (it lives in the original tab, never in
+one you create), but to avoid it entirely, dump a default config once:
+
+```bash
+mkdir -p ~/.config/zellij && zellij setup --dump-config > ~/.config/zellij/config.kdl
+```
+
+No session needs to be created ahead of time otherwise —
+`current-or-new-session.sh` handles that (or reuses what's already there).
+
+## A note on shells
+
+Some tool runners execute commands via `/bin/sh` (`dash`) rather than
+`bash`, which doesn't support bash-only syntax like `<<<` here-strings,
+`[[ ]]`, or arrays. Every script in this skill has a `#!/usr/bin/env bash`
+shebang, so calling them directly (`scripts/spawn.sh ...`) always runs
+correctly under real bash no matter which shell invoked it — the loader
+honors the shebang. What's *not* safe is typing bash-only syntax straight
+into a raw multi-line command yourself; if you need to combine steps
+inline, stick to the recipes below (they call the scripts directly and use
+plain `$(...)` command substitution, no here-strings or arrays).
 
 ## Recipe: background / long-running task
 
 ```bash
-SESSION=$(scripts/session.sh pi-myproject)
-PANE=$(zellij --session "$SESSION" action new-pane --name "build" -- npm run build:watch)
+SESSION=$(scripts/current-or-new-session.sh)
+scripts/spawn.sh "$SESSION" "build" -- docker compose build
 ```
 
-To just wait for a one-shot command to finish and grab its output:
+If pi is running nested inside Zellij, that's it — the build is now
+visibly running in a tab named "build" in the user's terminal, and their
+own view hasn't moved.
+
+Read its output — any time, from any later call, using only the name:
 
 ```bash
-PANE=$(zellij --session "$SESSION" action new-pane --name "tests" -- pytest -q)
-scripts/wait-exit.sh "$SESSION" "$PANE"     # blocks until it exits, prints final screen
+scripts/read.sh "$SESSION" "build"          # current viewport
+scripts/read.sh "$SESSION" "build" --full   # plus scrollback
 ```
 
-For pipeline-style steps where a human (or the agent, in a later turn) may
-need to intervene and retry, use the blocking flags instead of polling:
+Wait for a one-shot command to finish and grab its final output:
 
 ```bash
-zellij --session "$SESSION" action new-pane --block-until-exit-success -- make build
-# on failure the pane stays open showing the error; retry by simulating Enter:
-zellij --session "$SESSION" action send-keys --pane-id "$PANE" "Enter"
+scripts/wait-exit.sh "$SESSION" "build"     # blocks until it exits, prints final screen
 ```
 
-To keep monitoring without blocking, poll or stream:
+To keep working without blocking, poll `read.sh` periodically, or stream
+changes live:
 
 ```bash
-zellij --session "$SESSION" action dump-screen --pane-id "$PANE"          # snapshot
-zellij --session "$SESSION" subscribe --pane-id "$PANE" --format json \
+PANE_ID=$(scripts/pane-for-tab.sh "$SESSION" "build")
+zellij --session "$SESSION" subscribe --pane-id "$PANE_ID" --format json \
   | jq --unbuffered 'select(.event=="pane_update") | .viewport[] | select(test("ERROR"))'
+```
+
+For pipeline-style steps where intervention-and-retry is wanted, use the
+blocking flags directly instead of polling:
+
+```bash
+zellij --session "$SESSION" action new-tab --name "build" --block-until-exit-success -- make build
+# on failure the tab stays open showing the error; retry by simulating Enter in it:
+scripts/send.sh "$SESSION" "build" ""
 ```
 
 ## Recipe: driving a REPL (python, ipython, node, lldb, gdb, sqlite3, ...)
 
-Launch the REPL as the pane's own process (not "open a shell, then type
-`python3`") so there's no ambiguity about what's running:
-
 ```bash
-PANE=$(zellij --session "$SESSION" action new-pane --name "py" -- python3 -i)
-scripts/send.sh "$SESSION" "$PANE" "import pandas as pd"
-scripts/send.sh "$SESSION" "$PANE" "df = pd.read_csv('data.csv'); df.head()"
-zellij --session "$SESSION" action dump-screen --pane-id "$PANE"
+SESSION=$(scripts/current-or-new-session.sh)
+scripts/spawn.sh "$SESSION" "py" -- python3 -i
+scripts/send.sh "$SESSION" "py" "import pandas as pd"
+scripts/send.sh "$SESSION" "py" "df = pd.read_csv('data.csv'); df.head()"
+scripts/read.sh "$SESSION" "py"
 ```
 
-A REPL never "exits", so exit-status polling doesn't apply — instead wait
-for a marker to reappear. Two options:
+A REPL never "exits", so exit-status polling doesn't apply — wait for a
+marker to reappear instead:
 
-- **Wait for the prompt itself** (`>>>`, `In [`, `(lldb)`, `(gdb)`, `sqlite>`
-  ...): `scripts/wait-for.sh "$SESSION" "$PANE" '>>>'`
-- **Wait for a unique sentinel** (more robust, works even when the prompt
-  text is ambiguous or the REPL echoes multi-line output): append it to the
-  command itself where the REPL supports it, e.g. for a shell pane,
-  `echo "$cmd"; echo TASK_DONE_$$`, then
-  `scripts/wait-for.sh "$SESSION" "$PANE" "TASK_DONE_$$"`.
-
-Same pattern for a debugger:
-
-```bash
-PANE=$(zellij --session "$SESSION" action new-pane --name "dbg" -- lldb ./a.out)
-scripts/send.sh "$SESSION" "$PANE" "b main"
-scripts/send.sh "$SESSION" "$PANE" "run"
-scripts/wait-for.sh "$SESSION" "$PANE" '\(lldb\)'
-```
+- **Wait for the prompt itself** (`>>>`, `In [`, `(lldb)`, `(gdb)`,
+  `sqlite>`...): `scripts/wait-for.sh "$SESSION" "py" '>>>'`
+- **Wait for a unique sentinel** (more robust when the prompt text is
+  ambiguous or output is multi-line): echo it after the real input where
+  the REPL supports it, then
+  `scripts/wait-for.sh "$SESSION" "py" "TASK_DONE_$$"`.
 
 ## Recipe: controlling a remote machine over SSH
 
-Launch `ssh` as the pane's process so a dropped connection is reflected in
-the pane's exit status, then feed it commands the same way as a REPL:
-
 ```bash
-PANE=$(zellij --session "$SESSION" action new-pane --name "remote" -- ssh user@host)
-scripts/wait-for.sh "$SESSION" "$PANE" '\$\s*$'      # wait for a shell prompt
-scripts/send.sh "$SESSION" "$PANE" "systemctl status myservice; echo TASK_DONE_$$"
-scripts/wait-for.sh "$SESSION" "$PANE" "TASK_DONE_\$\$"
+SESSION=$(scripts/current-or-new-session.sh)
+scripts/spawn.sh "$SESSION" "remote" -- ssh user@host
+scripts/wait-for.sh "$SESSION" "remote" '\$\s*$'      # wait for a shell prompt
+scripts/send.sh "$SESSION" "remote" "systemctl status myservice; echo TASK_DONE_$$"
+scripts/wait-for.sh "$SESSION" "remote" "TASK_DONE_\$\$"
 ```
 
 Notes:
 
-- Prefer key-based auth so no interactive password prompt ever appears. If a
-  host-key or password prompt is unavoidable, poll for the literal prompt
+- Prefer key-based auth so no interactive password prompt ever appears. If
+  a host-key or password prompt is unavoidable, poll for the literal prompt
   text (`"(yes/no)"`, `"password:"`) with `wait-for.sh` before answering —
   never guess timing. Do not hardcode secrets in scripts; read them from an
   environment variable the user has already set.
-- To control several hosts in parallel, open one pane per host and issue
-  `paste` to each independently, then `wait` on the shell jobs. `zellij
-  action toggle-active-sync-tab` broadcasts identical keystrokes to every
-  pane in a tab — useful for literally identical fleet-wide commands (e.g.
-  `uptime`), unsafe for anything host-specific.
+- Because it's a real tab, a human can take over at any point — switch to
+  it and type directly, then hand back to the agent later.
+- To control several hosts in parallel, spawn one named tab per host
+  (`"remote-web1"`, `"remote-db1"`, ...) and `send.sh` to each
+  independently.
 
 ## Cleanup
 
 ```bash
-zellij --session "$SESSION" action close-pane --pane-id "$PANE"
-zellij kill-session "$SESSION"        # stop it
-zellij delete-session "$SESSION"      # and forget its resurrection metadata
-zellij list-sessions --short          # sanity check before assuming a clean slate
+scripts/close.sh "$SESSION" "build"
+zellij kill-session "$SESSION"          # only if you created a separate background session
+zellij delete-session "$SESSION"        # and forget its resurrection metadata
+zellij list-sessions --short            # sanity check before assuming a clean slate
 ```
+
+Don't call `kill-session`/`delete-session` on a session pi didn't create
+itself (i.e. the one it's nested inside) — that's the user's terminal.
 
 ## Helper scripts
 
-- `scripts/session.sh <name> [layout]` — ensure a background session exists.
-- `scripts/send.sh <session> <pane-id> "<text>"` — paste text then press Enter.
-- `scripts/wait-for.sh <session> <pane-id> <grep-ere-pattern> [timeout] [interval]`
-  — poll `dump-screen` until the pattern matches; prints the final screen.
-- `scripts/wait-exit.sh <session> <pane-id> [timeout] [interval]` — poll
-  `list-panes --json` until the pane has exited; prints the final full
-  screen. Requires `jq`.
+- `scripts/current-or-new-session.sh [fallback-name] [fallback-layout]` —
+  the default entry point: reuses the session pi is nested in if there is
+  one, otherwise ensures a detached background session.
+- `scripts/background-session.sh <name> [layout]` — force a separate
+  detached session even when nested (for a task that must outlive the
+  user's current terminal).
+- `scripts/spawn.sh <session> <tab-name> -- <command...>` — start a task as
+  its own named tab; restores prior focus afterward; prints
+  `"<tab-id> <pane-id>"` for immediate same-call use (not needed for later
+  calls — use the name).
+- `scripts/pane-for-tab.sh <session> <tab-name>` — resolve a tab's current
+  pane id fresh, by name. What every script below uses internally.
+- `scripts/read.sh <session> <tab-name> [--full] [--ansi]` — print a tab's
+  current output.
+- `scripts/send.sh <session> <tab-name> "<text>"` — paste text then press
+  Enter.
+- `scripts/wait-for.sh <session> <tab-name> <grep-ere-pattern> [timeout] [interval]`
+  — poll until the pattern matches; prints the final screen.
+- `scripts/wait-exit.sh <session> <tab-name> [timeout] [interval]` — poll
+  until the tab's command has exited; prints the final full screen.
+- `scripts/close.sh <session> <tab-name>` — close a tab by name.
+
+All scripts require `jq`.
 
 ## Gotchas
 
-- `paste`/`send-keys`/`write-chars` go through the pane's own shell and are
-  subject to its quoting rules. When only one command will ever run in a
-  pane, prefer passing it directly as `new-pane -- <command>` instead —
-  fewer escaping bugs, and it makes exit status and the `--block-until-*`
-  flags available.
-- `dump-screen` returns only the current viewport unless `--full` is given.
-- Two writers sending input to the same pane at the same time interleave
-  unpredictably. Route all writes to a given pane through one calling
+- `paste`/`send-keys` go through the pane's own shell/REPL and are subject
+  to its quoting rules. When only one command will ever run in a tab,
+  `spawn.sh` already runs it as the tab's own process (not typed into a
+  shell) — fewer escaping bugs, and exit status / `--block-until-*` flags
+  work.
+- `read.sh` (`dump-screen`) returns only the current viewport unless
+  `--full` is given.
+- Two writers sending input to the same tab at the same time interleave
+  unpredictably. Route all writes to a given tab through one calling
   context.
-- Always pass `--session` and `--pane-id`/`--tab-id` explicitly in scripts;
-  never depend on "current focus" or "current session".
+- If `$ZELLIJ`/`$ZELLIJ_SESSION_NAME` aren't visible even though pi is
+  visibly running inside Zellij (some sandboxes strip environment
+  variables from tool subprocesses), `current-or-new-session.sh` falls back
+  to a background session instead of reusing the visible one. If that
+  happens, ask the user for `echo $ZELLIJ_SESSION_NAME` once and pass it
+  explicitly as the fallback name.
 
-See `references/cli-reference.md` for the fuller action catalogue —
-querying session/pane/tab state as JSON, floating panes, layouts, and
-inline KDL layouts.
+See `references/cli-reference.md` for the fuller action catalogue.

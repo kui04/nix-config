@@ -11,6 +11,10 @@
 --   - description is 1-1024 chars
 --   - compatibility (optional) is 1-500 chars
 --   - frontmatter contains no unknown top-level fields
+--   - scalar values are read the way real YAML parsers read them:
+--     quoted and block (>, |) scalars are unfolded, and plain-scalar
+--     hazards (': ' inside unquoted values, ' #' comments, flow or
+--     reserved indicators, unbalanced quotes) are flagged
 
 local ALLOWED = {
   name = true,
@@ -63,11 +67,16 @@ Checks performed (per the Agent Skills spec):
   - description: 1-1024 chars, non-empty
   - compatibility (optional): 1-500 chars
   - All other frontmatter fields are warned (not errored)
+  - Scalar values are read the way real YAML parsers read them:
+    quoted and block (>, |) scalars are unfolded, and plain-scalar
+    hazards (': ' inside unquoted values, ' #' comments, flow or
+    reserved indicators, unbalanced quotes) are flagged
 
 Limitations:
-  - Only the first line of YAML block scalars (>, |) is parsed.
   - Unicode names are rejected (the spec allows them in principle;
     the bundled validator is ASCII-only).
+  - Double-quoted escape sequences and multi-line quoted folding are
+    measured verbatim, so reported lengths can differ by a few chars.
 
 Output:
   - Lines starting with OK:    go to stdout
@@ -132,17 +141,20 @@ if not first_line or first_line:match("^---%s*$") == nil then
   os.exit(1)
 end
 
--- Walk lines after the first '---' to find the closing '---'
+-- Split into lines, preserving blank lines (block scalars need them)
+-- and stripping CR so CRLF files behave.
 local lines = {}
-for line in content:gmatch("[^\n]+") do
-  table.insert(lines, line)
+for line in (content .. "\n"):gmatch("(.-)\n") do
+  table.insert(lines, (line:gsub("\r$", "")))
 end
 
 -- lines[1] should be the opening '---'
 -- find the closing '---'
 local close_idx
 for i = 2, #lines do
-  if lines[i]:match("^%s*---%s*$") then
+  -- The closing delimiter must start at column 0 — an indented '---'
+  -- could be content of a block scalar, not the end of frontmatter.
+  if lines[i]:match("^---%s*$") then
     close_idx = i
     break
   end
@@ -180,20 +192,107 @@ if #unknown > 0 then
 end
 
 -- --- Extract a scalar value for a given key --------------------------------
--- Returns the trimmed value, or nil if absent. Handles inline scalars only;
--- block scalars (>, |) and complex YAML structures need a real YAML parser.
-
+-- Returns the parsed value, or nil if absent. Understands plain, quoted and
+-- block (>, |) scalars, and flags constructs that real YAML parsers reject or
+-- reinterpret — so a skill that passes here also parses cleanly elsewhere.
+-- Still not a full YAML parser: double-quoted escape sequences are measured
+-- verbatim, and flow collections are only detected, not parsed.
 local function get_field(key)
-  for _, line in ipairs(fm_lines) do
-    -- string.match returns only the captures, not the full match.
-    -- With one capture group, the result is the captured value.
-    local v = line:match("^" .. key .. ":%s*(.*)$")
+  local pat = "^" .. key:gsub("%-", "%%-") .. ":%s*(.-)%s*$"
+  for i, line in ipairs(fm_lines) do
+    local v = line:match(pat)
     if v then
-      -- strip surrounding quotes. gsub returns (string, count); parens
-      -- discard the second return so chaining doesn't trip on it.
-      v = (v:gsub('^"', ''):gsub('"$', ''))
-      v = (v:gsub("^'", ""):gsub("'$", ""))
-      v = v:match("^%s*(.-)%s*$") -- trim
+      -- Block scalar: content lives on the following indented lines.
+      local bstyle = v:match("^([>|])[%+%-]?$")
+      if bstyle then
+        local buf = {}
+        local j = i + 1
+        while j <= #fm_lines do
+          local l = fm_lines[j]
+          if l:match("^%s*$") then
+            table.insert(buf, "")            -- blank line: paragraph break
+          elseif l:match("^%s") then
+            table.insert(buf, (l:gsub("^%s+", "")))
+          else
+            break                          -- next top-level key
+          end
+          j = j + 1
+        end
+        -- trailing blank lines only affect the final newline count, which
+        -- none of the checks below care about
+        while #buf > 0 and buf[#buf] == "" do table.remove(buf) end
+        if bstyle == ">" then
+          -- folded style: newlines become spaces, blank lines stay newlines
+          local parts, cur = {}, {}
+          for _, l in ipairs(buf) do
+            if l == "" then
+              if #cur > 0 then table.insert(parts, table.concat(cur, " ")); cur = {} end
+              table.insert(parts, "\n")
+            else
+              table.insert(cur, l)
+            end
+          end
+          if #cur > 0 then table.insert(parts, table.concat(cur, " ")) end
+          return table.concat(parts)
+        end
+        return table.concat(buf, "\n")       -- literal style
+      end
+
+      -- Quoted scalar; YAML lets it span lines (newlines fold to spaces).
+      -- Allow a trailing comment after a same-line closing quote first.
+      v = v:match("^('.-')%s+#") or v:match('^(".-")%s+#') or v
+      local q = v:sub(1, 1)
+      if q == "'" or q == '"' then
+        local buf = { (v:sub(2)) }
+        local closed = false
+        while true do
+          local cur = buf[#buf]
+          local ends = cur:sub(-1) == q and (q == "'" or cur:sub(-2, -1) ~= "\\" .. q)
+          if ends then
+            buf[#buf] = cur:sub(1, -2)
+            closed = true
+            break
+          end
+          if i + #buf > #fm_lines then break end
+          table.insert(buf, fm_lines[i + #buf])
+        end
+        if not closed then
+          err(key .. ": unbalanced " .. (q == "'" and "single" or "double")
+            .. " quotes — YAML parsers reject this. Quote both ends or use a block scalar (>-).")
+          return table.concat(buf, " ")
+        end
+        local s = table.concat(buf, " ")
+        if q == "'" then
+          if (s:gsub("''", "")):find("'") then
+            err(key .. ": single-quoted value contains an unescaped quote — YAML requires doubling it ('')")
+          end
+          s = s:gsub("''", "'")
+        end
+        return s
+      end
+
+      -- Plain (unquoted) scalar: apply the YAML rules a naive key:value
+      -- split gets wrong.
+      if v:sub(1, 1) == "#" then
+        err(key .. ": value starts with '#' — YAML reads it as a comment, leaving the field empty. Quote the value.")
+        return ""
+      end
+      local hash = v:find(" #", 1, true)
+      if hash then
+        warn(key .. ": unquoted value contains ' #' — YAML treats the rest as a comment. Quote the value to keep it whole.")
+        v = (v:sub(1, hash - 1):match("^%s*(.-)%s*$"))
+      end
+      if v:find(": ", 1, true) or (v ~= ":" and v:sub(-1) == ":") then
+        err(key .. ": unquoted value contains ': ' — YAML parses this as a nested mapping and rejects it. Wrap the whole value in quotes.")
+      end
+      local first = v:sub(1, 1)
+      if first == "[" or first == "{" then
+        err(key .. ": value starts with '" .. first .. "' — YAML parses it as a flow collection, not a string. Quote the value.")
+      elseif first == "*" or first == "%" or first == "@" or first == "`" then
+        err(key .. ": value starts with reserved YAML indicator '" .. first .. "' — parsers reject or misread it. Quote the value.")
+      elseif v:match("^%-%s") or v:match("^%?%s") then
+        err(key .. ": value starts with '" .. v:sub(1, 2) .. "' — YAML parses it as a block sequence/mapping, not a string. Quote the value.")
+      end
       return v
     end
   end

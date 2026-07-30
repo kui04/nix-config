@@ -8,6 +8,22 @@ before `action` to target a background session instead of "whatever session
 this shell is inside" (which, for an agent, is normally none — always pass
 `--session` explicitly).
 
+## Detecting a nested session
+
+Every pane started by Zellij gets three environment variables:
+
+- `ZELLIJ` — set to `0` (just a presence marker) when the shell is running
+  inside a Zellij pane.
+- `ZELLIJ_SESSION_NAME` — the name of the enclosing session.
+- `ZELLIJ_PANE_ID` — the bare numeric id of the pane itself (equivalent to
+  `terminal_<id>`).
+
+`ZELLIJ_SESSION_NAME` is *not* updated in already-running panes if the
+session is later renamed with `rename-session` — only new panes see the
+new name. If a session was recently renamed, re-resolve the name via
+`zellij action current-tab-info` from a fresh pane rather than trusting a
+stale environment variable.
+
 ## Session lifecycle
 
 | Goal | Command |
@@ -65,7 +81,14 @@ Key `new-pane` flags:
 - `dump-screen [--pane-id <id>] [--full] [--ansi] [--path <file>]` —
   one-shot snapshot of the current viewport; `--full` includes scrollback;
   `--ansi` keeps color/styling codes (otherwise plain text); no `--path`
-  means stdout. Good for polling loops and "read the final result".
+  means stdout. Good for polling loops and "read the final result". If
+  `--pane-id` is omitted it defaults to whatever pane is currently
+  *focused* — always pass `--pane-id` explicitly for automation, otherwise
+  a read can silently return whatever tab a human happens to be looking at
+  instead of the intended one. Verified against Zellij 0.44.3: with
+  `--pane-id` given, `dump-screen` returns that pane's real content
+  correctly even while a different tab is focused — targeting genuinely
+  does not depend on focus, only the omitted-flag default does.
 - `zellij [--session <name>] subscribe --pane-id <id> [--pane-id <id> ...] \`
   `[--format raw|json] [--scrollback [<n>]] [--ansi]` — delivers the current
   viewport immediately, then streams every subsequent change; exits once all
@@ -124,6 +147,81 @@ that sit on top of everything else without looking like a "pane" at all.
 A layout is the fastest way to stand up a whole multi-pane environment
 (editor + server + logs + shell) with a single `new-tab --layout ...` call
 instead of several `new-pane` calls.
+
+## Tabs always take focus
+
+Unlike `new-pane` (which has `--tab-id` to add a pane to another tab
+without switching to it), `new-tab` has no equivalent "create without
+focusing" flag — the newly created tab always becomes the active one. If
+that's disruptive (e.g. it would yank a human's attention away from
+whatever tab they're currently looking at), read which tab is currently
+active *before* creating the new one, and jump back right after:
+
+```
+CUR=$(zellij action list-tabs --json | jq -r '[.[] | select(.active==true)] | first | .tab_id // empty')
+NEW=$(zellij action new-tab --name "task" -- <command>)
+[ -n "$CUR" ] && zellij action go-to-tab-by-id "$CUR"
+```
+
+Prefer `list-tabs` (as above) over `current-tab-info` for this: the latter
+errors ("No active tab found for current client") when no real client is
+attached, e.g. in a purely headless background session with nobody looking
+at it — `list-tabs`'s `active` field is simply empty/absent in that case,
+which is easy to handle and means "no one to disturb, skip the restore".
+
+The new tab keeps running regardless of which tab is focused — focus only
+affects what's on screen, not whether a pane's process is alive.
+
+## Addressing tabs/panes by name instead of numeric ID
+
+Numeric pane/tab IDs returned by `new-pane`/`new-tab` are only useful
+within the same calling process — they won't be remembered by a *separate*
+later tool invocation unless something explicitly persists them. Names
+are the durable handle instead:
+
+- `list-tabs --json | jq '.[] | select(.name == "build")'` — find a tab by
+  name; take `.tab_id`.
+- `list-panes --json | jq '.[] | select(.tab_id == <id> and .is_plugin == false)'`
+  — find that tab's terminal pane; take `.id`. A freshly spawned task tab
+  has exactly one such pane.
+- `go-to-tab-name <name> [--create]` — switch focus to a tab by name
+  directly (optionally creating it if missing), no ID lookup needed at all
+  when the goal is just "look at this tab", as opposed to reading/writing
+  its content programmatically.
+- `close-tab [--tab-id <id>]` (defaults to current tab) / `close-tab-by-id
+  <id>` — both work; `close-tab --tab-id <id>` doesn't require the target
+  tab to be focused first.
+- `focus-pane-id <id>` — focus a specific pane (and its tab) by ID.
+
+## First-run overlays in a freshly created session
+
+The first time Zellij ever creates a session on a machine, and again right
+after a version upgrade, it can add a focused, floating plugin pane to the
+default tab — a "First Run Setup Wizard" or "Release Notes" overlay.
+Confirmed on 0.44.3: right after `attach --create-background`, `list-panes
+--json` can show two entries with `is_focused: true` at once (one floating
+plugin pane, one tiled terminal pane — floating and tiled panes track focus
+independently). This lives only in the original default tab, never in a
+tab your own automation creates, so it doesn't interfere with a
+name-addressed workflow — but it can surprise anything that assumes "the
+session's first/focused pane is my shell". Run `zellij setup --dump-config
+> ~/.config/zellij/config.kdl` once per machine to suppress it entirely.
+
+## Shell portability: /bin/sh vs bash
+
+Some tool runners execute shell commands via `/bin/sh`, which on Debian/
+Ubuntu-based systems (and this sandbox, confirmed by checking `$0`/`/proc/
+$$/exe`) is `dash`, not `bash`. Dash doesn't support `<<<` here-strings,
+`[[ ]]`, arrays, or `local`. A snippet like
+`read -r TAB_ID PANE_ID <<< "$(cmd)"` typed directly as a top-level command
+fails with a syntax error under dash, silently breaking whatever came after
+it in the same line (e.g. leaving a variable unset, which then causes a
+following `--pane-id "$PANE_ID"` to be passed as an empty flag, which some
+CLIs interpret as "unset", falling back to a focus-dependent default). A
+script file with a `#!/usr/bin/env bash` shebang is unaffected *when
+invoked directly* (`scripts/spawn.sh ...`) — the kernel honors the shebang
+regardless of the calling shell. It's typing bash-only syntax straight into
+a raw multi-line command that's the risk, not the scripts themselves.
 
 ## Concurrency notes
 

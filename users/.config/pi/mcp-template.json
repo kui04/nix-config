@@ -50,6 +50,16 @@
       },
       "lifecycle": "lazy"
     },
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@latest",
+        "--isolated",
+        "--browser",
+        "chromium"
+      ],
+      "lifecycle": "lazy"
+    },
     "tavily": {
       "url": "https://mcp.tavily.com/mcp/?tavilyApiKey=YOUR_TAVILY_API_KEY",
       "lifecycle": "lazy"

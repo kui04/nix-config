@@ -1,0 +1,43 @@
+# AGENTS.md
+
+<!--
+  Starter template. Delete any section the project doesn't need — there are no
+  required fields. Replace every <placeholder> and verify each command runs
+  before committing. See references/sections.md for what belongs in each section.
+-->
+
+## Project overview
+<1–3 sentences: what this project is and how the repo is laid out. For monorepos,
+map the packages and how to navigate between them.>
+
+## Setup commands
+- Install deps: `<command>`
+- Start dev server: `<command>`
+- Required tools: `<tools the repo relies on, e.g. just, rg, uv>`
+
+## Build and test
+- Build: `<command>`
+- Run all tests: `<command>`
+- Run a single test: `<command with <placeholder> for the test name/path>`
+- Lint: `<command>`
+- Typecheck: `<command>`
+
+## Code style
+- <Rules a linter won't catch: naming, idioms, deprecated patterns to avoid.
+  Link to rationale where possible.>
+
+## Testing instructions
+- Find the CI plan in <.github/workflows/ or equivalent>.
+- Fix any test or type errors until the whole suite is green.
+- Add or update tests for the code you change, even if nobody asked.
+
+## Regeneration / codegen
+- If you change <X>, run `<command>` to regenerate <Y> — CI verifies drift.
+
+## PR instructions
+- Title format: `<[<scope>] <Title> or conventional-commit format>`
+- Always run `<lint command>` and `<test command>` before committing.
+
+## Security and gotchas
+- <Secrets handling, sensitive paths, destructive operations needing guardrails,
+  environment constraints such as sandbox limits or "never run X on the host".>

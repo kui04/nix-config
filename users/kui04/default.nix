@@ -84,6 +84,7 @@ in
     ug = "sudo nixos-rebuild switch --flake ~/.nix-config#thinkbook";
     up = "sudo nix flake update --flake ~/.nix-config";
     ut = "sudo nixos-rebuild test --flake ~/.nix-config#thinkbook";
+    z = "zellij";
   };
 
   # starship
