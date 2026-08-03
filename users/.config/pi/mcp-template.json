@@ -1,4 +1,9 @@
-{
+{ 
+  "settings": {
+    "showStatusIcon": false,
+    "mcpFooterStatus": "compact"
+  },
+
   "mcpServers": {
     "chrome-devtools": {
       "command": "npx",

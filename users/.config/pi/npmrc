@@ -1,0 +1,19 @@
+# npm config for the pi extension install root (~/.pi/agent/npm).
+
+# Picked up by `npm install --prefix ~/.pi/agent/npm` because --prefix
+# makes npm read .npmrc from the prefix directory.
+fund=false
+audit=false
+
+# Errors only: hides npm deprecation/allow-scripts warnings so rebuilds and
+# pi startup stay quiet. Real errors still print.
+loglevel=error
+
+# No "new npm version available" notice.
+update-notifier=false
+
+# Approve install scripts that are required to work correctly:
+# - @google/genai: preinstall is a no-op
+# - pi-permission-system: postinstall patches vulnerable deps
+# - protobufjs: postinstall generates required runtime files
+allow-scripts=@google/genai,pi-permission-system,protobufjs

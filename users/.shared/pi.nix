@@ -58,13 +58,21 @@ in
   home.file.".pi/agent/skills".source = "${config}/skills";
   home.file.".pi/agent/pi-permissions.jsonc".source = "${config}/pi-permissions.jsonc";
   home.file.".pi/agent/zentui.json".source = "${config}/zentui.json";
+  home.file.".pi/agent/npm/.npmrc".source = "${config}/npmrc";
 
   home.file."Templates/pi-mcp.json".source = "${config}/mcp-template.json";
 
-  home.activation.cleanPiNpm = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+  # After every rebuild, wipe the pi extension install (node_modules +
+  # package-lock.json) and reinstall every dependency at @latest, so pi starts
+  # silent with fully up-to-date packages. Failures are tolerated: pi itself
+  # reinstalls whatever is missing on next startup.
+  home.activation.refreshPiNpm = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     npm_root="$HOME/.pi/agent/npm"
-    if [ -d "$npm_root/node_modules" ]; then
-      rm -rf "$npm_root/node_modules"
+    if [ -f "$npm_root/package.json" ]; then
+      rm -rf "$npm_root/node_modules" "$npm_root/package-lock.json"
+      mapfile -t deps < <(${lib.getExe pkgs.jq} -r '.dependencies | keys[]' "$npm_root/package.json")
+      specs=("''${deps[@]/%/@latest}")
+      ${pkgs.nodejs}/bin/npm install --prefix "$npm_root" --legacy-peer-deps "''${specs[@]}" || true
     fi
   '';
 }
