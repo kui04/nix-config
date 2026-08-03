@@ -75,16 +75,15 @@ in
 
   # bash shell
   programs.bash.enable = true;
+
   programs.bash.shellAliases = {
     clean = "sudo nix-collect-garbage -d";
-    nv = "nvidia-offload";
     nf = "nix flake new -t github:nix-community/nix-direnv";
-    po = "NIRI_SOCKET=$(find /run/user/$(id -u) -name 'niri.*.sock' -type s 2>/dev/null | head -1) niri msg action power-on-monitors";
+    niri-socket = "export NIRI_SOCKET=$(find /run/user/$(id -u) -maxdepth 1 -name 'niri.*.sock' 2>/dev/null | head -n1)";
     reboot-to-win = "systemctl reboot --boot-loader-entry=auto-windows";
     ug = "sudo nixos-rebuild switch --flake ~/.nix-config#thinkbook";
     up = "sudo nix flake update --flake ~/.nix-config";
     ut = "sudo nixos-rebuild test --flake ~/.nix-config#thinkbook";
-    z = "zellij";
   };
 
   # starship

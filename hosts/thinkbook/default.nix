@@ -151,17 +151,27 @@
   # allow it through firewall filter
   networking.firewall.trustedInterfaces = [ "virbr0" ];
 
+  # virtual display: an AOC 24G2W1G4 (24", 1920x1080@60/144) forced on HDMI-A-1, EDID fetched from the linuxhw database
+  hardware.display.edid.linuxhw."24G2W1G4" = [
+    "24G2W1G4"
+    "2021"
+  ];
+  hardware.display.outputs."HDMI-A-1" = {
+    edid = "24G2W1G4.bin";
+    mode = "1920x1080@60D";
+  };
+
   # graphics
   hardware.graphics.enable = true;
   hardware.graphics.extraPackages = with pkgs; [
-    # Required for modern Intel GPUs (Xe iGPU and ARC)
+    # required for modern Intel GPUs (Xe iGPU and ARC)
     intel-media-driver # VA-API (iHD) userspace
     vpl-gpu-rt # oneVPL (QSV) runtime
     intel-compute-runtime # OpenCL (NEO) + Level Zero for Arc/Xe
   ];
   environment.sessionVariables = {
-    LIBVA_DRIVER_NAME = "iHD"; # Prefer the modern iHD backend
-    # Force GTK to use the GL renderer, and related issue: https://gitlab.freedesktop.org/mesa/mesa/-/work_items/13319
+    LIBVA_DRIVER_NAME = "iHD"; # prefer the modern iHD backend
+    # force GTK to use the GL renderer, and related issue: https://gitlab.freedesktop.org/mesa/mesa/-/work_items/13319
     GSK_RENDERER = "gl";
   };
   services.xserver.videoDrivers = [
@@ -181,13 +191,13 @@
   # nvidia prime switcher
   services.switcherooControl.enable = true;
 
-  # enable CUPS to print documents.
+  # enable CUPS to print documents
   services.printing.enable = true;
 
-  # enable touchpad support (enabled default in most desktopManager).
+  # enable touchpad support (enabled default in most desktopManager)
   services.libinput.enable = true;
 
-  # enable the OpenSSH daemon.
+  # enable the OpenSSH daemon
   services.openssh.enable = true;
 
   # create_ap service for 5 GHz Wi-Fi 6 hotspot
