@@ -1,7 +1,8 @@
 {
   config,
-  pkgs,
+  inputs,
   lib,
+  pkgs,
   ...
 }:
 let
@@ -52,6 +53,7 @@ in
     unstable.rtk
     unstable.ollama-cuda
     unstable.openspec
+    inputs.boo.packages.${stdenv.hostPlatform.system}.default
   ];
 
   home.file.".pi/agent/extensions".source = "${config}/extensions";
