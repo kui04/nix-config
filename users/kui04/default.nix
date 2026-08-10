@@ -71,6 +71,7 @@ in
     "org.mozilla.firefox"
     "org.qbittorrent.qBittorrent"
     "org.telegram.desktop"
+    "org.tigervnc.vncviewer"
   ];
 
   # bash shell
