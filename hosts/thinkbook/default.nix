@@ -68,6 +68,7 @@
     inputs.agenix.packages.${stdenv.hostPlatform.system}.default
     neovim
     nil
+    nixd
     pciutils
     tree
     unzip

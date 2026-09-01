@@ -50,10 +50,9 @@ in
     pi
     ripgrep
     unstable.codegraph
+    unstable.rmux
     unstable.rtk
     unstable.ollama-cuda
-    unstable.openspec
-    inputs.boo.packages.${stdenv.hostPlatform.system}.default
   ];
 
   home.file.".pi/agent/extensions".source = "${config}/extensions";

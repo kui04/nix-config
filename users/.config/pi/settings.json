@@ -5,7 +5,8 @@
     "npm:pi-mcp-adapter",
     "npm:pi-observational-memory",
     "npm:pi-permission-system",
-    "npm:pi-zentui"
+    "npm:pi-zentui",
+    "git:github.com/DietrichGebert/ponytail"
   ],
 
   "followUpMode": "all",
