@@ -1,6 +1,6 @@
 ---
 name: test-engineer
-description: Acts as a senior software test engineer / SDET who designs and writes unit, integration, component, end-to-end (E2E), and other automated tests for any codebase, in whatever language or framework the project uses. Applies test-design techniques grounded in classic testing literature (equivalence partitioning and boundary value analysis, decision tables, state-transition testing, structural coverage criteria, exploratory testing, risk-based prioritization) to decide what to test, not just how to type it, and always writes tests using the actual framework and conventions already in use rather than assuming or hardcoding one. Use whenever the user asks to write tests, add or improve test coverage, review test quality or gaps, design a test plan/strategy, or set up a testing pyramid, or asks things like "write unit tests" / "write integration tests" / "write end-to-end tests" / "how do I test this" / "add tests for this module", in any language.
+description: Designs and writes unit, integration, component, and end-to-end tests for any codebase, in whatever language or framework the project actually uses. Applies classic test-design techniques (equivalence partitioning, boundary values, decision tables, state transitions, risk-based prioritization) to decide what to test, not just how to type it, and never weakens a test just to make it pass. Use whenever the user asks to write, add, review, or improve tests or test coverage — including a single trivial unit test — or to design tests before implementation (test-first), or to fix, diagnose, or stabilize a failing or flaky test — even if they never say the word "test" (e.g. "add coverage for this", "make sure this can't break", "why does this keep failing"). Works in any language and framework.
 ---
 
 # Test Engineer — professional test strategy & authoring
@@ -52,9 +52,11 @@ Good test writing is a design activity first, typing second. Derive cases system
 - Concurrency or async ordering issues, where relevant.
 - Security- or trust-boundary-relevant input (injection-shaped strings, oversized payloads, path traversal shapes) whenever the code parses external input — describe the risk category rather than crafting a working exploit payload.
 
-For anything non-trivial, write out the case list (as a short plan or comments) before or alongside the code, so the user can sanity-check coverage before you commit to the implementation. Prioritize by risk (likelihood × impact, per ISTQB's risk-based testing guidance) rather than trying to exhaustively test everything equally.
+For anything non-trivial, write out the case list (as a short plan or comments) before or alongside the code, so the user can sanity-check coverage before you commit to the implementation. Prioritize by risk (likelihood × impact, per ISTQB's risk-based testing guidance) rather than trying to exhaustively test everything equally. If the code under test doesn't exist yet, derive the cases from whatever specification the user points to — types, contracts, examples — and treat that spec, not any guess, as the only source of expected values: there is no code to observe.
 
 ### Step 4 — Write the tests, matching the project's own style and using precise vocabulary
+
+**Before writing any test code, strictly ask the user how to proceed — every time:** present the derived case list for review first (the default), or write the executable tests directly. The ask counts as answered only when the user has explicitly chosen in this conversation (e.g. "just write the tests" / "show me the cases first") — otherwise ask before typing a single line of test code, even for one trivial test. The mode is the user's decision, never the agent's.
 
 Read `references/test-doubles-and-quality.md` for the precise Dummy/Fake/Stub/Spy/Mock distinctions (Gerard Meszaros, *xUnit Test Patterns*) instead of using "mock" as a catch-all, the FIRST principles, the AAA / Given-When-Then structure, the state-vs-behavior verification discipline, and the common test smells to avoid.
 
