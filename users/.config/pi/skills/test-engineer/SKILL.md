@@ -15,11 +15,12 @@ The steps below mirror the fundamental test process from the ISTQB Foundation sy
 
 ### Step 1 — Get the test framework specified; don't infer it from scratch
 
-Maintaining a hardcoded map of every language's testing ecosystem isn't this skill's job — it would go stale immediately and it's the opposite of being framework-agnostic. Instead of silently scanning the repo and guessing:
+Maintaining a hardcoded map of every language's testing ecosystem isn't this skill's job — it would go stale immediately and it's the opposite of being framework-agnostic. Establish the framework from evidence, in this order — the anti-pattern is *guessing* (writing test code against a framework you have no evidence of), not looking at the repo:
 
 - If this skill was invoked with an argument naming a framework or tool, treat that as authoritative.
 - Otherwise, check whether the user or the conversation has already named the test framework, runner, or assertion/mocking library, or pointed you at a manifest/lockfile/existing test directory.
-- If it's still unclear, ask directly which test framework, runner, and assertion/mocking library the project uses (or should use, for a new project) — don't guess or silently default.
+- Otherwise, inspect the project yourself: read the manifest(s)/lockfile, the existing test files and their imports, and test-runner config to identify the framework, runner, and assertion/mocking style actually in use. Inspecting the repo is evidence-gathering, not guessing — what's forbidden is assuming a framework with no evidence for it.
+- Only if the evidence is genuinely ambiguous (several frameworks in play, or no tests and no manifest anywhere) ask directly which test framework, runner, and assertion/mocking library the project uses (or should use, for a new project) — don't guess or silently default.
 
 Once the framework is known: if it's unfamiliar to you, or a newer/less common tool (e.g. `cargo-nextest`, a niche framework version, an internal harness), look up its documentation (web search, its own README, or `--help` output) before writing any test code — don't invent syntax. Then match the project's existing naming conventions, file layout, and assertion/mocking style, or the framework's own idiomatic conventions if there's nothing to match yet.
 
@@ -42,7 +43,7 @@ Match test level to what could actually break, rather than reflexively writing e
 
 ### Step 3 — Design the test cases before writing code
 
-Good test writing is a design activity first, typing second. Derive cases systematically using the technique catalogue in `references/test-design-techniques.md` — equivalence partitioning and boundary value analysis (Glenford Myers, *The Art of Software Testing*), decision tables and state-transition testing (Paul Jorgensen, *Software Testing: A Craftsman's Approach*), structural/white-box coverage criteria (Boris Beizer), pairwise/combinatorial testing, error guessing, and property-based testing. At minimum, always consider:
+Good test writing is a design activity first, typing second. Derive cases systematically using the technique catalogue in `references/test-design-techniques.md` — equivalence partitioning and boundary value analysis (Glenford Myers, *The Art of Software Testing*), decision tables and state-transition testing (Paul Jorgensen, *Software Testing: A Craftsman's Approach*), structural/white-box coverage criteria (Boris Beizer), pairwise/combinatorial testing, error guessing, property-based testing, and metamorphic testing for behavior that has no direct oracle. At minimum, always consider:
 
 - The happy path(s) — the case(s) the code was obviously written for.
 - Boundary/edge values — empty, zero, negative, max, min, off-by-one, just inside/outside a range.
@@ -55,7 +56,7 @@ For anything non-trivial, write out the case list (as a short plan or comments) 
 
 ### Step 4 — Write the tests, matching the project's own style and using precise vocabulary
 
-Read `references/test-doubles-and-quality.md` for the precise Dummy/Fake/Stub/Spy/Mock distinctions (Gerard Meszaros, *xUnit Test Patterns*) instead of using "mock" as a catch-all, the FIRST principles, the AAA / Given-When-Then structure, and the common test smells to avoid.
+Read `references/test-doubles-and-quality.md` for the precise Dummy/Fake/Stub/Spy/Mock distinctions (Gerard Meszaros, *xUnit Test Patterns*) instead of using "mock" as a catch-all, the FIRST principles, the AAA / Given-When-Then structure, the state-vs-behavior verification discipline, and the common test smells to avoid.
 
 - Use the specified framework's real, current APIs and idioms — don't invent syntax, and don't port conventions from a different framework/language wholesale.
 - Match existing naming conventions, file layout, and assertion style already in the repo. If there's no existing convention, `references/test-types.md` has sane per-language naming fallbacks.
@@ -71,7 +72,7 @@ Read `references/test-doubles-and-quality.md` for the precise Dummy/Fake/Stub/Sp
 
 ## When a test fails: diagnose before you touch the test
 
-This is the single most common way this skill goes wrong in practice: a test fails, and the response becomes "edit the test until it's green" instead of "find out why it failed." A test's expected result — its *oracle* — is supposed to come from the specification or the user's actual intent, not from whatever the code currently happens to output (see Barr, Harman, McMinn, Bowes & Yoo, *"The Oracle Problem in Software Testing: A Survey"*, IEEE TSE, for the formal treatment of this). Treating the test as the thing to adjust, rather than the code, quietly breaks that guarantee and defeats the entire purpose of having the test.
+This is the single most common way this skill goes wrong in practice: a test fails, and the response becomes "edit the test until it's green" instead of "find out why it failed." A test's expected result — its *oracle* — is supposed to come from the specification or the user's actual intent, not from whatever the code currently happens to output (see Barr, Harman, McMinn, Shahbaz & Yoo, *"The Oracle Problem in Software Testing: A Survey"*, IEEE TSE, for the formal treatment of this). Treating the test as the thing to adjust, rather than the code, quietly breaks that guarantee and defeats the entire purpose of having the test. The survey's taxonomy of oracle sources — specified, derived, implicit, and human — plus metamorphic testing, the practical response when no direct oracle exists, is summarized in `references/test-design-techniques.md`.
 
 When a test fails, work through this in order — don't skip ahead to editing the test:
 

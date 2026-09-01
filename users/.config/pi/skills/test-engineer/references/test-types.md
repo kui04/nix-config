@@ -12,11 +12,14 @@ The ISTQB Foundation syllabus is the closest thing the industry has to a shared 
 
 ## Testing pyramid — how many, at which level
 
-An idea popularized by Mike Cohn (*Succeeding with Agile*) and explained further since by Martin Fowler: put the largest number of tests at the fastest, most isolated level, and shrink each layer as it gets slower and broader.
+An idea popularized by Mike Cohn (*Succeeding with Agile*) and explained further since by Martin Fowler, whose distillation is the part worth remembering: **write tests with different granularity, and the higher (slower, broader) the level, the fewer tests you write there.** The shape encodes a trade-off, not an aesthetic: low-level tests are fast, precise about what failed, and cheap to keep green; high-level tests are slower and flakier, and when one fails the cause isn't immediately obvious. Inverting the shape (the "ice-cream cone") yields a suite too slow to run on every change and too flaky to trust. Two refinements:
+
+- Cohn's original three layers (unit, service, UI) are a heuristic, not a law — the shape should follow the architecture. Service-heavy systems may legitimately lean integration-heavy (Fowler's "test honeycomb" for microservices); the pyramid is the defensible *default*, not a compliance target.
+- UI tests and E2E tests are orthogonal concepts: driving a full journey usually does go through the UI, but UI logic itself can be tested with the backend stubbed, at component-test speed. Don't automatically equate "UI test" with "slow E2E test."
 
 ### Unit tests
 
-**Scope:** a single function, method, or class, in isolation. All external collaborators (DB, network, filesystem, clock, other services) are replaced with test doubles (see `test-doubles-and-quality.md`).
+**Scope:** a single function, method, or class, in isolation. All external collaborators (DB, network, filesystem, clock, other services) are replaced with test doubles (see `references/test-doubles-and-quality.md`).
 **Write when:** the code has non-trivial logic, branching, calculations, or business rules worth pinning down.
 **Skip/lighten when:** the code is a trivial pass-through (a one-line getter, a straight re-export) — a unit test here is noise, not signal.
 **Naming fallback (no existing convention):**
@@ -46,7 +49,7 @@ should_[behavior]_when_[condition]()
 
 **Scope:** a full user journey through the real (or near-real) system — real browser or app driver, ideally close-to-real backend.
 **Write when:** the journey is business-critical (login, checkout, payment, primary conversion flow) and a regression there would be high-impact.
-**Keep deliberately few:** they're the slowest and most flaki-prone layer. Prefer resilient selectors (`data-testid` or accessible roles, not brittle CSS paths), explicit waits over `sleep()`, isolated/disposable test data, and cleanup after the run. Never run destructive tests against production data.
+**Keep deliberately few:** they're the slowest and most flake-prone layer. Prefer resilient selectors (accessible roles/labels first, `data-testid` as fallback, never brittle CSS paths), explicit waits over `sleep()`, isolated/disposable test data, and cleanup after the run. Never run destructive tests against production data.
 
 ## The Agile Testing Quadrants — what is this test *for*
 
@@ -61,11 +64,20 @@ Use the quadrants as a checklist after drafting a pyramid-shaped plan: does this
 
 ## Test size (a third, independent axis)
 
-The small/medium/large classification used at Google (see *Software Engineering at Google*, Winters, Manshreck & Tannenbaum) classifies a test by *what it's allowed to touch* — small (single process, no network/disk/sleep), medium (single machine, e.g. localhost network or a local DB), large (multiple machines, real external systems) — independent of which pyramid layer or quadrant it belongs to. This is a useful lens for CI design: it determines whether a test can run in a fast, parallel, hermetic shard, or needs a slower, more realistic environment.
+The small/medium/large classification used at Google (see *Software Engineering at Google*, Winters, Manshreck & Tannenbaum) defines a test by *what it's allowed to touch* — expressed as constraints the test infrastructure can actually enforce, not advisory labels — independent of which pyramid layer or quadrant it belongs to:
+
+- **Small** — a single process, no network access, no disk I/O, no sleeping or other blocking calls: fully hermetic and deterministic, runs in seconds. Code that touches these resources needs test doubles (see `references/test-doubles-and-quality.md`) to stay small.
+- **Medium** — a single machine: localhost network, the filesystem, multiple processes, and sleep/polling are allowed; access to *remote* machines is forbidden — remote network access is the single biggest source of slowness and nondeterminism in most systems.
+- **Large** — anything goes: multiple machines, real networks and external systems, minutes to hours (Google's default timeouts run from 15 minutes to an hour, and some large tests run far longer); nonhermetic and potentially nondeterministic by nature.
+
+This is the lens for CI design: size, not pyramid level, decides whether a test can run in a fast, parallel, hermetic shard or needs a slower, more realistic environment. And size is orthogonal to scope — a unit test (narrow scope) is usually small-sized, but "narrow" and "allowed to touch nothing but memory" answer different questions. Always write the smallest size that covers the change.
 
 ## Contract / API tests
 
-**Scope:** verifying that a service honors its published interface (REST/GraphQL/gRPC schema, request/response shape, status codes, error format) — often via schema validation or consumer-driven contract tests (e.g. Pact-style).
+**Scope:** verifying that a service honors its published interface (REST/GraphQL/gRPC schema, request/response shape, status codes, error format).
+
+Consumer-driven contract testing (Pact-style) is the key mechanism for multi-service setups: each consumer's tests record their actual expectations as a **contract** artifact, and the provider's pipeline replays every consumer's contract against each provider change — breaking changes surface at the provider's commit, not in a staging integration, and not in production. Where there's no identifiable consumer set, schema conformance validation (OpenAPI/GraphQL SDL) is the lightweight variant.
+
 **Write when:** the change touches a public/internal API boundary that other services or clients depend on, especially before a breaking-change risk.
 
 ## Non-functional tests (Quadrant 4 / ISTQB non-functional testing) — call these out even if not asked
