@@ -1,6 +1,4 @@
 {
-  config,
-  inputs,
   lib,
   pkgs,
   ...
@@ -55,6 +53,7 @@ in
     unstable.ollama-cuda
   ];
 
+  home.file.".pi/agent/APPEND_SYSTEM.md".source = "${config}/APPEND_SYSTEM.md";
   home.file.".pi/agent/extensions".source = "${config}/extensions";
   home.file.".pi/agent/skills".source = "${config}/skills";
   home.file.".pi/agent/pi-permissions.jsonc".source = "${config}/pi-permissions.jsonc";
