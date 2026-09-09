@@ -4,14 +4,13 @@
 
 # FFI Idioms
 
-Writing FFI code is an entire course in itself. However, there are several
-idioms here that can act as pointers, and avoid traps for inexperienced users of
-`unsafe` Rust.
+Writing FFI code is an entire course in itself. However, there are several idioms here that can act as pointers, and
+avoid traps for inexperienced users of `unsafe` Rust.
 
 This section contains idioms that may be useful when doing FFI.
 
-1. [Idiomatic Errors](./errors.md) - Error handling with integer codes and
-   sentinel return values (such as `NULL` pointers)
+1. [Idiomatic Errors](./errors.md) - Error handling with integer codes and sentinel return values (such as `NULL`
+   pointers)
 
 2. [Accepting Strings](./accepting-strings.md) with minimal unsafe code
 
@@ -21,16 +20,13 @@ This section contains idioms that may be useful when doing FFI.
 
 ## Description
 
-In foreign languages like C, errors are represented by return codes. However,
-Rust's type system allows much more rich error information to be captured and
-propagated through a full type.
+In foreign languages like C, errors are represented by return codes. However, Rust's type system allows much more rich
+error information to be captured and propagated through a full type.
 
-This best practice shows different kinds of error codes, and how to expose them
-in a usable way:
+This best practice shows different kinds of error codes, and how to expose them in a usable way:
 
 1. Flat Enums should be converted to integers and returned as codes.
-2. Structured Enums should be converted to an integer code with a string error
-   message for detail.
+2. Structured Enums should be converted to an integer code with a string error message for detail.
 3. Custom Error Types should become "transparent", with a C representation.
 
 ## Code Example
@@ -146,41 +142,37 @@ impl From<ParseError> for parse_error {
 
 ## Advantages
 
-This ensures that the foreign language has clear access to error information
-while not compromising the Rust code's API at all.
+This ensures that the foreign language has clear access to error information while not compromising the Rust code's API
+at all.
 
 ## Disadvantages
 
-It's a lot of typing, and some types may not be able to be converted easily to
-C.
+It's a lot of typing, and some types may not be able to be converted easily to C.
 
 # Accepting Strings
 
 ## Description
 
-When accepting strings via FFI through pointers, there are two principles that
-should be followed:
+When accepting strings via FFI through pointers, there are two principles that should be followed:
 
 1. Keep foreign strings "borrowed", rather than copying them directly.
-2. Minimize the amount of complexity and `unsafe` code involved in converting
-   from a C-style string to native Rust strings.
+2. Minimize the amount of complexity and `unsafe` code involved in converting from a C-style string to native Rust
+   strings.
 
 ## Motivation
 
 The strings used in C have different behaviours to those used in Rust, namely:
 
 - C strings are null-terminated while Rust strings store their length
-- C strings can contain any arbitrary non-zero byte while Rust strings must be
-  UTF-8
-- C strings are accessed and manipulated using `unsafe` pointer operations while
-  interactions with Rust strings go through safe methods
+- C strings can contain any arbitrary non-zero byte while Rust strings must be UTF-8
+- C strings are accessed and manipulated using `unsafe` pointer operations while interactions with Rust strings go
+  through safe methods
 
-The Rust standard library comes with C equivalents of Rust's `String` and `&str`
-called `CString` and `&CStr`, that allow us to avoid a lot of the complexity and
-`unsafe` code involved in converting between C strings and Rust strings.
+The Rust standard library comes with C equivalents of Rust's `String` and `&str` called `CString` and `&CStr`, that
+allow us to avoid a lot of the complexity and `unsafe` code involved in converting between C strings and Rust strings.
 
-The `&CStr` type also allows us to work with borrowed data, meaning passing
-strings between Rust and C is a zero-cost operation.
+The `&CStr` type also allows us to work with borrowed data, meaning passing strings between Rust and C is a zero-cost
+operation.
 
 ## Code Example
 
@@ -271,23 +263,18 @@ pub mod unsafe_module {
 
 This code is inferior to the original in two respects:
 
-1. There is much more `unsafe` code, and more importantly, more invariants it
-   must uphold.
-2. Due to the extensive arithmetic required, there is a bug in this version that
-   causes Rust `undefined behaviour`.
+1. There is much more `unsafe` code, and more importantly, more invariants it must uphold.
+2. Due to the extensive arithmetic required, there is a bug in this version that causes Rust `undefined behaviour`.
 
-The bug here is a simple mistake in pointer arithmetic: the string was copied,
-all `msg_len` bytes of it. However, the `NUL` terminator at the end was not.
+The bug here is a simple mistake in pointer arithmetic: the string was copied, all `msg_len` bytes of it. However, the
+`NUL` terminator at the end was not.
 
-The Vector then had its size *set* to the length of the *zero padded string* --
-rather than *resized* to it, which could have added a zero at the end. As a
-result, the last byte in the Vector is uninitialized memory. When the `CString`
-is created at the bottom of the block, its read of the Vector will cause
-`undefined behaviour`!
+The Vector then had its size _set_ to the length of the _zero padded string_ -- rather than _resized_ to it, which could
+have added a zero at the end. As a result, the last byte in the Vector is uninitialized memory. When the `CString` is
+created at the bottom of the block, its read of the Vector will cause `undefined behaviour`!
 
-Like many such issues, this would be difficult issue to track down. Sometimes it
-would panic because the string was not `UTF-8`, sometimes it would put a weird
-character at the end of the string, sometimes it would just completely crash.
+Like many such issues, this would be difficult issue to track down. Sometimes it would panic because the string was not
+`UTF-8`, sometimes it would put a weird character at the end of the string, sometimes it would just completely crash.
 
 ## Disadvantages
 
@@ -297,26 +284,21 @@ None?
 
 ## Description
 
-When passing strings to FFI functions, there are four principles that should be
-followed:
+When passing strings to FFI functions, there are four principles that should be followed:
 
 1. Make the lifetime of owned strings as long as possible.
 2. Minimize `unsafe` code during the conversion.
 3. If the C code can modify the string data, use `Vec` instead of `CString`.
-4. Unless the Foreign Function API requires it, the ownership of the string
-   should not transfer to the callee.
+4. Unless the Foreign Function API requires it, the ownership of the string should not transfer to the callee.
 
 ## Motivation
 
-Rust has built-in support for C-style strings with its `CString` and `CStr`
-types. However, there are different approaches one can take with strings that
-are being sent to a foreign function call from a Rust function.
+Rust has built-in support for C-style strings with its `CString` and `CStr` types. However, there are different
+approaches one can take with strings that are being sent to a foreign function call from a Rust function.
 
-The best practice is simple: use `CString` in such a way as to minimize `unsafe`
-code. However, a secondary caveat is that *the object must live long enough*,
-meaning the lifetime should be maximized. In addition, the documentation
-explains that "round-tripping" a `CString` after modification is UB, so
-additional work is necessary in that case.
+The best practice is simple: use `CString` in such a way as to minimize `unsafe` code. However, a secondary caveat is
+that _the object must live long enough_, meaning the lifetime should be maximized. In addition, the documentation
+explains that "round-tripping" a `CString` after modification is UB, so additional work is necessary in that case.
 
 ## Code Example
 
@@ -366,8 +348,7 @@ The example is written in a way to ensure that:
 2. The `CString` lives long enough.
 3. Errors with typecasts are always propagated when possible.
 
-A common mistake (so common it's in the documentation) is to not use the
-variable in the first block:
+A common mistake (so common it's in the documentation) is to not use the variable in the first block:
 
 ```rust,ignore
 pub mod unsafe_module {
@@ -384,14 +365,12 @@ pub mod unsafe_module {
 }
 ```
 
-This code will result in a dangling pointer, because the lifetime of the
-`CString` is not extended by the pointer creation, unlike if a reference were
-created.
+This code will result in a dangling pointer, because the lifetime of the `CString` is not extended by the pointer
+creation, unlike if a reference were created.
 
-Another issue frequently raised is that the initialization of a 1k vector of
-zeroes is "slow". However, recent versions of Rust actually optimize that
-particular macro to a call to `zmalloc`, meaning it is as fast as the operating
-system's ability to return zeroed memory (which is quite fast).
+Another issue frequently raised is that the initialization of a 1k vector of zeroes is "slow". However, recent versions
+of Rust actually optimize that particular macro to a call to `zmalloc`, meaning it is as fast as the operating system's
+ability to return zeroed memory (which is quite fast).
 
 ## Disadvantages
 

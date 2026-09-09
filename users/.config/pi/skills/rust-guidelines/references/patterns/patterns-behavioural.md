@@ -6,38 +6,34 @@
 
 From [Wikipedia](https://en.wikipedia.org/wiki/Behavioral_pattern):
 
-> Design patterns that identify common communication patterns among objects. By
-> doing so, these patterns increase flexibility in carrying out communication.
+> Design patterns that identify common communication patterns among objects. By doing so, these patterns increase
+> flexibility in carrying out communication.
 
 # Command
 
 ## Description
 
-The basic idea of the Command pattern is to separate out actions into its own
-objects and pass them as parameters.
+The basic idea of the Command pattern is to separate out actions into its own objects and pass them as parameters.
 
 ## Motivation
 
-Suppose we have a sequence of actions or transactions encapsulated as objects.
-We want these actions or commands to be executed or invoked in some order later
-at different time. These commands may also be triggered as a result of some
-event. For example, when a user pushes a button, or on arrival of a data packet.
-In addition, these commands might be undoable. This may come in useful for
-operations of an editor. We might want to store logs of executed commands so
-that we could reapply the changes later if the system crashes.
+Suppose we have a sequence of actions or transactions encapsulated as objects. We want these actions or commands to be
+executed or invoked in some order later at different time. These commands may also be triggered as a result of some
+event. For example, when a user pushes a button, or on arrival of a data packet. In addition, these commands might be
+undoable. This may come in useful for operations of an editor. We might want to store logs of executed commands so that
+we could reapply the changes later if the system crashes.
 
 ## Example
 
-Define two database operations `create table` and `add field`. Each of these
-operations is a command which knows how to undo the command, e.g., `drop table`
-and `remove field`. When a user invokes a database migration operation then each
-command is executed in the defined order, and when the user invokes the rollback
-operation then the whole set of commands is invoked in reverse order.
+Define two database operations `create table` and `add field`. Each of these operations is a command which knows how to
+undo the command, e.g., `drop table` and `remove field`. When a user invokes a database migration operation then each
+command is executed in the defined order, and when the user invokes the rollback operation then the whole set of
+commands is invoked in reverse order.
 
 ## Approach: Using trait objects
 
-We define a common trait which encapsulates our command with two operations
-`execute` and `rollback`. All command `structs` must implement this trait.
+We define a common trait which encapsulates our command with two operations `execute` and `rollback`. All command
+`structs` must implement this trait.
 
 ```rust
 pub trait Migration {
@@ -105,11 +101,9 @@ fn main() {
 
 ## Approach: Using function pointers
 
-We could follow another approach by creating each individual command as a
-different function and store function pointers to invoke these functions later
-at a different time. Since function pointers implement all three traits `Fn`,
-`FnMut`, and `FnOnce` we could as well pass and store closures instead of
-function pointers.
+We could follow another approach by creating each individual command as a different function and store function pointers
+to invoke these functions later at a different time. Since function pointers implement all three traits `Fn`, `FnMut`,
+and `FnOnce` we could as well pass and store closures instead of function pointers.
 
 ```rust
 type FnPtr = fn() -> String;
@@ -160,8 +154,8 @@ fn main() {
 
 ## Approach: Using `Fn` trait objects
 
-Finally, instead of defining a common command trait we could store each command
-implementing the `Fn` trait separately in vectors.
+Finally, instead of defining a common command trait we could store each command implementing the `Fn` trait separately
+in vectors.
 
 ```rust
 type Migration<'a> = Box<dyn Fn() -> &'a str>;
@@ -213,18 +207,14 @@ fn main() {
 
 ## Discussion
 
-If our commands are small and may be defined as functions or passed as a closure
-then using function pointers might be preferable since it does not exploit
-dynamic dispatch. But if our command is a whole struct with a bunch of functions
-and variables defined as separated module then using trait objects would be more
-suitable. A case of application can be found in [`actix`](https://actix.rs/),
-which uses trait objects when it registers a handler function for routes. In
-case of using `Fn` trait objects we can create and use commands in the same way
-as we used in case of function pointers.
+If our commands are small and may be defined as functions or passed as a closure then using function pointers might be
+preferable since it does not exploit dynamic dispatch. But if our command is a whole struct with a bunch of functions
+and variables defined as separated module then using trait objects would be more suitable. A case of application can be
+found in [`actix`](https://actix.rs/), which uses trait objects when it registers a handler function for routes. In case
+of using `Fn` trait objects we can create and use commands in the same way as we used in case of function pointers.
 
-As performance, there is always a trade-off between performance and code
-simplicity and organisation. Static dispatch gives faster performance, while
-dynamic dispatch provides flexibility when we structure our application.
+As performance, there is always a trade-off between performance and code simplicity and organisation. Static dispatch
+gives faster performance, while dynamic dispatch provides flexibility when we structure our application.
 
 ## See also
 
@@ -236,32 +226,27 @@ dynamic dispatch provides flexibility when we structure our application.
 
 ## Description
 
-If a problem occurs very often and requires long and repetitive steps to solve
-it, then the problem instances might be expressed in a simple language and an
-interpreter object could solve it by interpreting the sentences written in this
+If a problem occurs very often and requires long and repetitive steps to solve it, then the problem instances might be
+expressed in a simple language and an interpreter object could solve it by interpreting the sentences written in this
 simple language.
 
 Basically, for any kind of problems we define:
 
-- A
-  [domain specific language](https://en.wikipedia.org/wiki/Domain-specific_language),
+- A [domain specific language](https://en.wikipedia.org/wiki/Domain-specific_language),
 - A grammar for this language,
 - An interpreter that solves the problem instances.
 
 ## Motivation
 
-Our goal is to translate simple mathematical expressions into postfix
-expressions (or
-[Reverse Polish notation](https://en.wikipedia.org/wiki/Reverse_Polish_notation))
-For simplicity, our expressions consist of ten digits `0`, ..., `9` and two
-operations `+`, `-`. For example, the expression `2 + 4` is translated into
+Our goal is to translate simple mathematical expressions into postfix expressions (or
+[Reverse Polish notation](https://en.wikipedia.org/wiki/Reverse_Polish_notation)) For simplicity, our expressions
+consist of ten digits `0`, ..., `9` and two operations `+`, `-`. For example, the expression `2 + 4` is translated into
 `2 4 +`.
 
 ## Context Free Grammar for our problem
 
-Our task is translating infix expressions into postfix ones. Let's define a
-context free grammar for a set of infix expressions over `0`, ..., `9`, `+`, and
-`-`, where:
+Our task is translating infix expressions into postfix ones. Let's define a context free grammar for a set of infix
+expressions over `0`, ..., `9`, `+`, and `-`, where:
 
 - Terminal symbols: `0`, `...`, `9`, `+`, `-`
 - Non-terminal symbols: `exp`, `term`
@@ -275,17 +260,15 @@ exp -> term
 term -> 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
 ```
 
-**NOTE:** This grammar should be further transformed depending on what we are
-going to do with it. For example, we might need to remove left recursion. For
-more details please see
+**NOTE:** This grammar should be further transformed depending on what we are going to do with it. For example, we might
+need to remove left recursion. For more details please see
 [Compilers: Principles,Techniques, and Tools](https://en.wikipedia.org/wiki/Compilers:_Principles,_Techniques,_and_Tools)
 (aka Dragon Book).
 
 ## Solution
 
-We simply implement a recursive descent parser. For simplicity's sake, the code
-panics when an expression is syntactically wrong (for example `2-34` or `2+5-`
-are wrong according to the grammar definition).
+We simply implement a recursive descent parser. For simplicity's sake, the code panics when an expression is
+syntactically wrong (for example `2-34` or `2+5-` are wrong according to the grammar definition).
 
 ```rust
 pub struct Interpreter<'a> {
@@ -338,17 +321,14 @@ pub fn main() {
 
 ## Discussion
 
-There may be a wrong perception that the Interpreter design pattern is about
-design grammars for formal languages and implementation of parsers for these
-grammars. In fact, this pattern is about expressing problem instances in a more
-specific way and implementing functions/classes/structs that solve these problem
-instances. Rust language has `macro_rules!` that allow us to define special
-syntax and rules on how to expand this syntax into source code.
+There may be a wrong perception that the Interpreter design pattern is about design grammars for formal languages and
+implementation of parsers for these grammars. In fact, this pattern is about expressing problem instances in a more
+specific way and implementing functions/classes/structs that solve these problem instances. Rust language has
+`macro_rules!` that allow us to define special syntax and rules on how to expand this syntax into source code.
 
 In the following example we create a simple `macro_rules!` that computes
-[Euclidean length](https://en.wikipedia.org/wiki/Euclidean_distance) of `n`
-dimensional vectors. Writing `norm!(x,1,2)` might be easier to express and more
-efficient than packing `x,1,2` into a `Vec` and calling a function computing the
+[Euclidean length](https://en.wikipedia.org/wiki/Euclidean_distance) of `n` dimensional vectors. Writing `norm!(x,1,2)`
+might be easier to express and more efficient than packing `x,1,2` into a `Vec` and calling a function computing the
 length.
 
 ```rust
@@ -383,20 +363,18 @@ fn main() {
 
 # Newtype
 
-What if in some cases we want a type to behave similar to another type or
-enforce some behaviour at compile time when using only type aliases would not be
-enough?
+What if in some cases we want a type to behave similar to another type or enforce some behaviour at compile time when
+using only type aliases would not be enough?
 
-For example, if we want to create a custom `Display` implementation for `String`
-due to security considerations (e.g. passwords).
+For example, if we want to create a custom `Display` implementation for `String` due to security considerations (e.g.
+passwords).
 
-For such cases we could use the `Newtype` pattern to provide **type safety** and
-**encapsulation**.
+For such cases we could use the `Newtype` pattern to provide **type safety** and **encapsulation**.
 
 ## Description
 
-Use a tuple struct with a single field to make an opaque wrapper for a type.
-This creates a new type, rather than an alias to a type (`type` items).
+Use a tuple struct with a single field to make an opaque wrapper for a type. This creates a new type, rather than an
+alias to a type (`type` items).
 
 ## Example
 
@@ -427,77 +405,65 @@ secured_password: ****************
 
 ## Motivation
 
-The primary motivation for newtypes is abstraction. It allows you to share
-implementation details between types while precisely controlling the interface.
-By using a newtype rather than exposing the implementation type as part of an
-API, it allows you to change implementation backwards compatibly.
+The primary motivation for newtypes is abstraction. It allows you to share implementation details between types while
+precisely controlling the interface. By using a newtype rather than exposing the implementation type as part of an API,
+it allows you to change implementation backwards compatibly.
 
-Newtypes can be used for distinguishing units, e.g., wrapping `f64` to give
-distinguishable `Miles` and `Kilometres`.
+Newtypes can be used for distinguishing units, e.g., wrapping `f64` to give distinguishable `Miles` and `Kilometres`.
 
 ## Advantages
 
-The wrapped and wrapper types are not type compatible (as opposed to using
-`type`), so users of the newtype will never 'confuse' the wrapped and wrapper
-types.
+The wrapped and wrapper types are not type compatible (as opposed to using `type`), so users of the newtype will never
+'confuse' the wrapped and wrapper types.
 
 Newtypes are a zero-cost abstraction - there is no runtime overhead.
 
-The privacy system ensures that users cannot access the wrapped type (if the
-field is private, which it is by default).
+The privacy system ensures that users cannot access the wrapped type (if the field is private, which it is by default).
 
 ## Disadvantages
 
-The downside of newtypes (especially compared with type aliases), is that there
-is no special language support. This means there can be *a lot* of boilerplate.
-You need a 'pass through' method for every method you want to expose on the
-wrapped type, and an impl for every trait you want to also be implemented for
-the wrapper type.
+The downside of newtypes (especially compared with type aliases), is that there is no special language support. This
+means there can be _a lot_ of boilerplate. You need a 'pass through' method for every method you want to expose on the
+wrapped type, and an impl for every trait you want to also be implemented for the wrapper type.
 
 ## Discussion
 
-Newtypes are very common in Rust code. Abstraction or representing units are the
-most common uses, but they can be used for other reasons:
+Newtypes are very common in Rust code. Abstraction or representing units are the most common uses, but they can be used
+for other reasons:
 
-- restricting functionality (reduce the functions exposed or traits
-  implemented),
+- restricting functionality (reduce the functions exposed or traits implemented),
 - making a type with copy semantics have move semantics,
-- abstraction by providing a more concrete type and thus hiding internal types,
-  e.g.,
+- abstraction by providing a more concrete type and thus hiding internal types, e.g.,
 
 ```rust,ignore
 pub struct Foo(Bar<T1, T2>);
 ```
 
-Here, `Bar` might be some public, generic type and `T1` and `T2` are some
-internal types. Users of our module shouldn't know that we implement `Foo` by
-using a `Bar`, but what we're really hiding here is the types `T1` and `T2`, and
-how they are used with `Bar`.
+Here, `Bar` might be some public, generic type and `T1` and `T2` are some internal types. Users of our module shouldn't
+know that we implement `Foo` by using a `Bar`, but what we're really hiding here is the types `T1` and `T2`, and how
+they are used with `Bar`.
 
 ## See also
 
 - [Advanced Types in the book](https://doc.rust-lang.org/book/ch19-04-advanced-types.html?highlight=newtype#using-the-newtype-pattern-for-type-safety-and-abstraction)
 - [Newtypes in Haskell](https://wiki.haskell.org/Newtype)
 - [Type aliases](https://doc.rust-lang.org/stable/book/ch19-04-advanced-types.html#creating-type-synonyms-with-type-aliases)
-- [derive_more](https://crates.io/crates/derive_more), a crate for deriving many
-  builtin traits on newtypes.
+- [derive_more](https://crates.io/crates/derive_more), a crate for deriving many builtin traits on newtypes.
 - [The Newtype Pattern In Rust](https://web.archive.org/web/20230519162111/https://www.worthe-it.co.za/blog/2020-10-31-newtype-pattern-in-rust.html)
 
 # RAII with guards
 
 ## Description
 
-[RAII][wikipedia] stands for "Resource Acquisition is Initialisation" which is a
-terrible name. The essence of the pattern is that resource initialisation is
-done in the constructor of an object and finalisation in the destructor. This
-pattern is extended in Rust by using a RAII object as a guard of some resource
-and relying on the type system to ensure that access is always mediated by the
-guard object.
+[RAII][wikipedia] stands for "Resource Acquisition is Initialisation" which is a terrible name. The essence of the
+pattern is that resource initialisation is done in the constructor of an object and finalisation in the destructor. This
+pattern is extended in Rust by using a RAII object as a guard of some resource and relying on the type system to ensure
+that access is always mediated by the guard object.
 
 ## Example
 
-Mutex guards are the classic example of this pattern from the std library (this
-is a simplified version of the real implementation):
+Mutex guards are the classic example of this pattern from the std library (this is a simplified version of the real
+implementation):
 
 ```rust,ignore
 use std::ops::Deref;
@@ -557,28 +523,23 @@ fn baz(x: Mutex<Foo>) {
 
 ## Motivation
 
-Where a resource must be finalised after use, RAII can be used to do this
-finalisation. If it is an error to access that resource after finalisation, then
-this pattern can be used to prevent such errors.
+Where a resource must be finalised after use, RAII can be used to do this finalisation. If it is an error to access that
+resource after finalisation, then this pattern can be used to prevent such errors.
 
 ## Advantages
 
-Prevents errors where a resource is not finalised and where a resource is used
-after finalisation.
+Prevents errors where a resource is not finalised and where a resource is used after finalisation.
 
 ## Discussion
 
-RAII is a useful pattern for ensuring resources are properly deallocated or
-finalised. We can make use of the borrow checker in Rust to statically prevent
-errors stemming from using resources after finalisation takes place.
+RAII is a useful pattern for ensuring resources are properly deallocated or finalised. We can make use of the borrow
+checker in Rust to statically prevent errors stemming from using resources after finalisation takes place.
 
-The core aim of the borrow checker is to ensure that references to data do not
-outlive that data. The RAII guard pattern works because the guard object
-contains a reference to the underlying resource and only exposes such
-references. Rust ensures that the guard cannot outlive the underlying resource
-and that references to the resource mediated by the guard cannot outlive the
-guard. To see how this works it is helpful to examine the signature of `deref`
-without lifetime elision:
+The core aim of the borrow checker is to ensure that references to data do not outlive that data. The RAII guard pattern
+works because the guard object contains a reference to the underlying resource and only exposes such references. Rust
+ensures that the guard cannot outlive the underlying resource and that references to the resource mediated by the guard
+cannot outlive the guard. To see how this works it is helpful to examine the signature of `deref` without lifetime
+elision:
 
 ```rust,ignore
 fn deref<'a>(&'a self) -> &'a T {
@@ -586,61 +547,51 @@ fn deref<'a>(&'a self) -> &'a T {
 }
 ```
 
-The returned reference to the resource has the same lifetime as `self` (`'a`).
-The borrow checker therefore ensures that the lifetime of the reference to `T`
-is shorter than the lifetime of `self`.
+The returned reference to the resource has the same lifetime as `self` (`'a`). The borrow checker therefore ensures that
+the lifetime of the reference to `T` is shorter than the lifetime of `self`.
 
-Note that implementing `Deref` is not a core part of this pattern, it only makes
-using the guard object more ergonomic. Implementing a `get` method on the guard
-works just as well.
+Note that implementing `Deref` is not a core part of this pattern, it only makes using the guard object more ergonomic.
+Implementing a `get` method on the guard works just as well.
 
 ## See also
 
 [Finalisation in destructors idiom](../../idioms/dtor-finally.md)
 
-RAII is a common pattern in C++:
-[cppreference.com](http://en.cppreference.com/w/cpp/language/raii),
+RAII is a common pattern in C++: [cppreference.com](http://en.cppreference.com/w/cpp/language/raii),
 [wikipedia][wikipedia].
 
 [wikipedia]: https://en.wikipedia.org/wiki/Resource_Acquisition_Is_Initialization
 
-[Style guide entry](https://doc.rust-lang.org/1.0.0/style/ownership/raii.html)
-(currently just a placeholder).
+[Style guide entry](https://doc.rust-lang.org/1.0.0/style/ownership/raii.html) (currently just a placeholder).
 
 # Strategy (aka Policy)
 
 ## Description
 
-The [Strategy design pattern](https://en.wikipedia.org/wiki/Strategy_pattern) is
-a technique that enables separation of concerns. It also allows to decouple
-software modules through
+The [Strategy design pattern](https://en.wikipedia.org/wiki/Strategy_pattern) is a technique that enables separation of
+concerns. It also allows to decouple software modules through
 [Dependency Inversion](https://en.wikipedia.org/wiki/Dependency_inversion_principle).
 
-The basic idea behind the Strategy pattern is that, given an algorithm solving a
-particular problem, we define only the skeleton of the algorithm at an abstract
-level, and we separate the specific algorithm’s implementation into different
+The basic idea behind the Strategy pattern is that, given an algorithm solving a particular problem, we define only the
+skeleton of the algorithm at an abstract level, and we separate the specific algorithm’s implementation into different
 parts.
 
-In this way, a client using the algorithm may choose a specific implementation,
-while the general algorithm workflow remains the same. In other words, the
-abstract specification of the class does not depend on the specific
-implementation of the derived class, but specific implementation must adhere to
-the abstract specification. This is why we call it "Dependency Inversion".
+In this way, a client using the algorithm may choose a specific implementation, while the general algorithm workflow
+remains the same. In other words, the abstract specification of the class does not depend on the specific implementation
+of the derived class, but specific implementation must adhere to the abstract specification. This is why we call it
+"Dependency Inversion".
 
 ## Motivation
 
-Imagine we are working on a project that generates reports every month. We need
-the reports to be generated in different formats (strategies), e.g., in `JSON`
-or `Plain Text` formats. But things vary over time, and we don't know what kind
-of requirement we may get in the future. For example, we may need to generate
-our report in a completely new format, or just modify one of the existing
-formats.
+Imagine we are working on a project that generates reports every month. We need the reports to be generated in different
+formats (strategies), e.g., in `JSON` or `Plain Text` formats. But things vary over time, and we don't know what kind of
+requirement we may get in the future. For example, we may need to generate our report in a completely new format, or
+just modify one of the existing formats.
 
 ## Example
 
-In this example our invariants (or abstractions) are `Formatter` and `Report`,
-while `Text` and `Json` are our strategy structs. These strategies have to
-implement the `Formatter` trait.
+In this example our invariants (or abstractions) are `Formatter` and `Report`, while `Text` and `Json` are our strategy
+structs. These strategies have to implement the `Formatter` trait.
 
 ```rust
 use std::collections::HashMap;
@@ -706,41 +657,34 @@ fn main() {
 
 ## Advantages
 
-The main advantage is separation of concerns. For example, in this case `Report`
-does not know anything about specific implementations of `Json` and `Text`,
-whereas the output implementations does not care about how data is preprocessed,
-stored, and fetched. The only thing they have to know is a specific trait to
-implement and its method defining the concrete algorithm implementation
-processing the result, i.e., `Formatter` and `format(...)`.
+The main advantage is separation of concerns. For example, in this case `Report` does not know anything about specific
+implementations of `Json` and `Text`, whereas the output implementations does not care about how data is preprocessed,
+stored, and fetched. The only thing they have to know is a specific trait to implement and its method defining the
+concrete algorithm implementation processing the result, i.e., `Formatter` and `format(...)`.
 
 ## Disadvantages
 
-For each strategy there must be implemented at least one module, so number of
-modules increases with number of strategies. If there are many strategies to
-choose from then users have to know how strategies differ from one another.
+For each strategy there must be implemented at least one module, so number of modules increases with number of
+strategies. If there are many strategies to choose from then users have to know how strategies differ from one another.
 
 ## Discussion
 
-In the previous example all strategies are implemented in a single file. Ways of
-providing different strategies includes:
+In the previous example all strategies are implemented in a single file. Ways of providing different strategies
+includes:
 
-- All in one file (as shown in this example, similar to being separated as
-  modules)
+- All in one file (as shown in this example, similar to being separated as modules)
 - Separated as modules, E.g. `formatter::json` module, `formatter::text` module
 - Use compiler feature flags, E.g. `json` feature, `text` feature
 - Separated as crates, E.g. `json` crate, `text` crate
 
 Serde crate is a good example of the `Strategy` pattern in action. Serde allows
-[full customization](https://serde.rs/custom-serialization.html) of the
-serialization behavior by manually implementing `Serialize` and `Deserialize`
-traits for our type. For example, we could easily swap `serde_json` with
-`serde_cbor` since they expose similar methods. Having this makes the helper
-crate `serde_transcode` much more useful and ergonomic.
+[full customization](https://serde.rs/custom-serialization.html) of the serialization behavior by manually implementing
+`Serialize` and `Deserialize` traits for our type. For example, we could easily swap `serde_json` with `serde_cbor`
+since they expose similar methods. Having this makes the helper crate `serde_transcode` much more useful and ergonomic.
 
 However, we don't need to use traits in order to design this pattern in Rust.
 
-The following toy example demonstrates the idea of the Strategy pattern using
-Rust `closures`:
+The following toy example demonstrates the idea of the Strategy pattern using Rust `closures`:
 
 ```rust
 struct Adder;
@@ -795,13 +739,11 @@ fn main() {
 
 ## Description
 
-A visitor encapsulates an algorithm that operates over a heterogeneous
-collection of objects. It allows multiple different algorithms to be written
-over the same data without having to modify the data (or their primary
-behaviour).
+A visitor encapsulates an algorithm that operates over a heterogeneous collection of objects. It allows multiple
+different algorithms to be written over the same data without having to modify the data (or their primary behaviour).
 
-Furthermore, the visitor pattern allows separating the traversal of a collection
-of objects from the operations performed on each object.
+Furthermore, the visitor pattern allows separating the traversal of a collection of objects from the operations
+performed on each object.
 
 ## Example
 
@@ -861,23 +803,19 @@ impl Visitor<i64> for Interpreter {
 }
 ```
 
-One could implement further visitors, for example a type checker, without having
-to modify the AST data.
+One could implement further visitors, for example a type checker, without having to modify the AST data.
 
 ## Motivation
 
-The visitor pattern is useful anywhere that you want to apply an algorithm to
-heterogeneous data. If data is homogeneous, you can use an iterator-like
-pattern. Using a visitor object (rather than a functional approach) allows the
+The visitor pattern is useful anywhere that you want to apply an algorithm to heterogeneous data. If data is
+homogeneous, you can use an iterator-like pattern. Using a visitor object (rather than a functional approach) allows the
 visitor to be stateful and thus communicate information between nodes.
 
 ## Discussion
 
-It is common for the `visit_*` methods to return void (as opposed to in the
-example). In that case it is possible to factor out the traversal code and share
-it between algorithms (and also to provide noop default methods). In Rust, the
-common way to do this is to provide `walk_*` functions for each datum. For
-example,
+It is common for the `visit_*` methods to return void (as opposed to in the example). In that case it is possible to
+factor out the traversal code and share it between algorithms (and also to provide noop default methods). In Rust, the
+common way to do this is to provide `walk_*` functions for each datum. For example,
 
 ```rust,ignore
 pub fn walk_expr(visitor: &mut Visitor, e: &Expr) {
@@ -895,8 +833,7 @@ pub fn walk_expr(visitor: &mut Visitor, e: &Expr) {
 }
 ```
 
-In other languages (e.g., Java) it is common for data to have an `accept` method
-which performs the same duty.
+In other languages (e.g., Java) it is common for data to have an `accept` method which performs the same duty.
 
 ## See also
 
@@ -904,5 +841,5 @@ The visitor pattern is a common pattern in most OO languages.
 
 [Wikipedia article](https://en.wikipedia.org/wiki/Visitor_pattern)
 
-The [fold](../creational/fold.md) pattern is similar to visitor but produces a
-new version of the visited data structure.
+The [fold](../creational/fold.md) pattern is similar to visitor but produces a new version of the visited data
+structure.

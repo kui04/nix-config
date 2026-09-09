@@ -1,10 +1,8 @@
 # VPS Proxy Deployment With Home Manager
 
-I use this flake on a non-NixOS VPS. Home Manager still handles the service
-definition, but I run it as `root` because the proxy services need extra
-capabilities to bind to `443` and handle port hopping cleanly. Home Manager can
-do user-level services just fine; the root shell is the practical way to get
-the required caps here.
+I use this flake on a non-NixOS VPS. Home Manager still handles the service definition, but I run it as `root` because
+the proxy services need extra capabilities to bind to `443` and handle port hopping cleanly. Home Manager can do
+user-level services just fine; the root shell is the practical way to get the required caps here.
 
 Run every command below as `root` unless noted.
 
@@ -31,15 +29,13 @@ git clone https://github.com/kui04/nix-config /root/.nix-config
 
 ## 4. Prepare Secrets
 
-If you want to reuse this flake on another VPS, update `secrets/secrets.nix`
-before switching:
+If you want to reuse this flake on another VPS, update `secrets/secrets.nix` before switching:
 
 - add the new VPS host's public key (use only `cat /etc/ssh/ssh_host_ed25519_key.pub`; do not use any other key)
 - remove public keys that no longer need access
-- if you only changed recipients, re-encrypt the existing `.age` files for the
-  updated recipient list (`sudo agenix -r -i /etc/ssh/ssh_host_ed25519_key`)
-- run `./users/fkgfw/gen.sh` only when you want fresh server credentials or a
-  new mihomo config
+- if you only changed recipients, re-encrypt the existing `.age` files for the updated recipient list
+  (`sudo agenix -r -i /etc/ssh/ssh_host_ed25519_key`)
+- run `./users/fkgfw/gen.sh` only when you want fresh server credentials or a new mihomo config
 
 ## 5. Apply The Profile
 
@@ -49,8 +45,7 @@ Run this from a root shell:
 nix run github:nix-community/home-manager/release-26.05 -- switch --flake /root/.nix-config#fkgfw
 ```
 
-After the first switch, `home-manager` is installed by the profile and `hs`
-works in new root shells.
+After the first switch, `home-manager` is installed by the profile and `hs` works in new root shells.
 
 ## 6. Hysteria 2 Port Hopping
 

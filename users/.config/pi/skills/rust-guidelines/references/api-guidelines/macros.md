@@ -2,21 +2,19 @@
 
 # Macros
 
-
 <a id="c-evocative"></a>
+
 ## Input syntax is evocative of the output (C-EVOCATIVE)
 
-Rust macros let you dream up practically whatever input syntax you want. Aim to
-keep input syntax familiar and cohesive with the rest of your users' code by
-mirroring existing Rust syntax where possible. Pay attention to the choice and
+Rust macros let you dream up practically whatever input syntax you want. Aim to keep input syntax familiar and cohesive
+with the rest of your users' code by mirroring existing Rust syntax where possible. Pay attention to the choice and
 placement of keywords and punctuation.
 
-A good guide is to use syntax, especially keywords and punctuation, that is
-similar to what will be produced in the output of the macro.
+A good guide is to use syntax, especially keywords and punctuation, that is similar to what will be produced in the
+output of the macro.
 
-For example if your macro declares a struct with a particular name given in the
-input, preface the name with the keyword `struct` to signal to readers that a
-struct is being declared with the given name.
+For example if your macro declares a struct with a particular name given in the input, preface the name with the keyword
+`struct` to signal to readers that a struct is being declared with the given name.
 
 ```rust
 // Prefer this...
@@ -35,9 +33,8 @@ bitflags! {
 }
 ```
 
-Another example is semicolons vs commas. Constants in Rust are followed by
-semicolons so if your macro declares a chain of constants, they should likely be
-followed by semicolons even if the syntax is otherwise slightly different from
+Another example is semicolons vs commas. Constants in Rust are followed by semicolons so if your macro declares a chain
+of constants, they should likely be followed by semicolons even if the syntax is otherwise slightly different from
 Rust's.
 
 ```rust
@@ -62,16 +59,15 @@ bitflags! {
 }
 ```
 
-Macros are so diverse that these specific examples won't be relevant, but think
-about how to apply the same principles to your situation.
-
+Macros are so diverse that these specific examples won't be relevant, but think about how to apply the same principles
+to your situation.
 
 <a id="c-macro-attr"></a>
+
 ## Item macros compose well with attributes (C-MACRO-ATTR)
 
-Macros that produce more than one output item should support adding attributes
-to any one of those items. One common use case would be putting individual items
-behind a cfg.
+Macros that produce more than one output item should support adding attributes to any one of those items. One common use
+case would be putting individual items behind a cfg.
 
 ```rust
 bitflags! {
@@ -84,8 +80,7 @@ bitflags! {
 }
 ```
 
-Macros that produce a struct or enum as output should support attributes so that
-the output can be used with derive.
+Macros that produce a struct or enum as output should support attributes so that the output can be used with derive.
 
 ```rust
 bitflags! {
@@ -97,13 +92,12 @@ bitflags! {
 }
 ```
 
-
 <a id="c-anywhere"></a>
+
 ## Item macros work anywhere that items are allowed (C-ANYWHERE)
 
-Rust allows items to be placed at the module level or within a tighter scope
-like a function. Item macros should work equally well as ordinary items in all
-of these places. The test suite should include invocations of the macro in at
+Rust allows items to be placed at the module level or within a tighter scope like a function. Item macros should work
+equally well as ordinary items in all of these places. The test suite should include invocations of the macro in at
 least the module scope and function scope.
 
 ```rust
@@ -118,8 +112,7 @@ mod tests {
 }
 ```
 
-As a simple example of how things can go wrong, this macro works great in a
-module scope but fails in a function scope.
+As a simple example of how things can go wrong, this macro works great in a module scope but fails in a function scope.
 
 ```rust
 macro_rules! broken {
@@ -138,12 +131,11 @@ fn g() {
 }
 ```
 
-
 <a id="c-macro-vis"></a>
+
 ## Item macros support visibility specifiers (C-MACRO-VIS)
 
-Follow Rust syntax for visibility of items produced by a macro. Private by
-default, public if `pub` is specified.
+Follow Rust syntax for visibility of items produced by a macro. Private by default, public if `pub` is specified.
 
 ```rust
 bitflags! {
@@ -161,12 +153,11 @@ bitflags! {
 }
 ```
 
-
 <a id="c-macro-ty"></a>
+
 ## Type fragments are flexible (C-MACRO-TY)
 
-If your macro accepts a type fragment like `$t:ty` in the input, it should be
-usable with all of the following:
+If your macro accepts a type fragment like `$t:ty` in the input, it should be usable with all of the following:
 
 - Primitives: `u8`, `&str`
 - Relative paths: `m::Data`
@@ -174,8 +165,8 @@ usable with all of the following:
 - Upward relative paths: `super::Data`
 - Generics: `Vec<String>`
 
-As a simple example of how things can go wrong, this macro works great with
-primitives and absolute paths but fails with relative paths.
+As a simple example of how things can go wrong, this macro works great with primitives and absolute paths but fails with
+relative paths.
 
 ```rust
 macro_rules! broken {

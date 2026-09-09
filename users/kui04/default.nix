@@ -1,4 +1,6 @@
 {
+  config,
+  lib,
   pkgs,
   username,
   ...
@@ -110,4 +112,13 @@ in
   programs.atuin.enable = true;
   programs.atuin.daemon.enable = true;
   programs.atuin.enableBashIntegration = true;
+
+  # install this repo's pre-commit hook (nix-managed, idempotent)
+  home.activation.installNixConfigGitHook = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    repo_root="${config.home.homeDirectory}/.nix-config"
+    if [ -d "$repo_root/.git" ] && [ -f "$repo_root/hooks/pre-commit" ]; then
+      mkdir -p "$repo_root/.git/hooks"
+      ln -sf "$repo_root/hooks/pre-commit" "$repo_root/.git/hooks/pre-commit"
+    fi
+  '';
 }

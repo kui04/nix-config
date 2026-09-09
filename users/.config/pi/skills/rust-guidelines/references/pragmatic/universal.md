@@ -2,7 +2,6 @@
 
 # Universal Guidelines (Pragmatic Rust Guidelines)
 
-
 ## Follow the upstream guidelines (M-UPSTREAM-GUIDELINES) { #M-UPSTREAM-GUIDELINES }
 
 <why>a codebase that reflects community lessons and does not surprise users or contributors.</why>
@@ -14,20 +13,22 @@ The guidelines in this book complement existing Rust guidelines, in particular:
 - [Rust Design Patterns](https://rust-unofficial.github.io/patterns//intro.html)
 - [Rust Reference - Undefined Behavior](https://doc.rust-lang.org/reference/behavior-considered-undefined.html)
 
-We recommend you read through these as well, and apply them in addition to this book's items. Pay special attention to the ones below, as they are frequently forgotten:
+We recommend you read through these as well, and apply them in addition to this book's items. Pay special attention to
+the ones below, as they are frequently forgotten:
 
-- [ ] [C-CONV](https://rust-lang.github.io/api-guidelines/naming.html#ad-hoc-conversions-follow-as_-to_-into_-conventions-c-conv) - Ad-hoc conversions
-  follow  `as_`, `to_`, `into_` conventions
-- [ ] [C-GETTER](https://rust-lang.github.io/api-guidelines/naming.html#getter-names-follow-rust-convention-c-getter) - Getter names follow Rust convention
-- [ ] [C-COMMON-TRAITS](https://rust-lang.github.io/api-guidelines/interoperability.html#c-common-traits) - Types eagerly implement common traits
+- [ ] [C-CONV](https://rust-lang.github.io/api-guidelines/naming.html#ad-hoc-conversions-follow-as_-to_-into_-conventions-c-conv) -
+      Ad-hoc conversions follow `as_`, `to_`, `into_` conventions
+- [ ] [C-GETTER](https://rust-lang.github.io/api-guidelines/naming.html#getter-names-follow-rust-convention-c-getter) -
+      Getter names follow Rust convention
+- [ ] [C-COMMON-TRAITS](https://rust-lang.github.io/api-guidelines/interoperability.html#c-common-traits) - Types
+      eagerly implement common traits
   - `Copy`, `Clone`, `Eq`, `PartialEq`, `Ord`, `PartialOrd`, `Hash`, `Default`, `Debug`
   - `Display` where type wants to be displayed
 - [ ] [C-CTOR](https://rust-lang.github.io/api-guidelines/predictability.html?highlight=new#constructors-are-static-inherent-methods-c-ctor) -
-  Constructors are static, inherent methods
+      Constructors are static, inherent methods
   - In particular, have `Foo::new()`, even if you have `Foo::default()`
-- [ ] [C-FEATURE](https://rust-lang.github.io/api-guidelines/naming.html#feature-names-are-free-of-placeholder-words-c-feature) - Feature names
-  are free of placeholder words
-
+- [ ] [C-FEATURE](https://rust-lang.github.io/api-guidelines/naming.html#feature-names-are-free-of-placeholder-words-c-feature) -
+      Feature names are free of placeholder words
 
 ## Use static verification (M-STATIC-VERIFICATION) { #M-STATIC-VERIFICATION }
 
@@ -36,18 +37,19 @@ We recommend you read through these as well, and apply them in addition to this 
 Projects should use the following static verification tools to help maintain the quality of the code. These tools can be
 configured to run on a developer's machine during normal work, and should be used as part of check-in gates.
 
-* [compiler lints](https://doc.rust-lang.org/rustc/lints/index.html) offer many lints to avoid bugs and improve code quality.
-* [clippy lints](https://doc.rust-lang.org/clippy/) contain hundreds of lints to avoid bugs and improve code quality.
-* [rustfmt](https://github.com/rust-lang/rustfmt) ensures consistent source formatting.
-* [cargo-audit](https://crates.io/crates/cargo-audit) verifies crate dependencies for security vulnerabilities.
-* [cargo-hack](https://crates.io/crates/cargo-hack) validates that all combinations of crate features work correctly.
-* [cargo-udeps](https://crates.io/crates/cargo-udeps) detects unused dependencies in Cargo.toml files.
-* [miri](https://github.com/rust-lang/miri) validates the correctness of unsafe code.
+- [compiler lints](https://doc.rust-lang.org/rustc/lints/index.html) offer many lints to avoid bugs and improve code
+  quality.
+- [clippy lints](https://doc.rust-lang.org/clippy/) contain hundreds of lints to avoid bugs and improve code quality.
+- [rustfmt](https://github.com/rust-lang/rustfmt) ensures consistent source formatting.
+- [cargo-audit](https://crates.io/crates/cargo-audit) verifies crate dependencies for security vulnerabilities.
+- [cargo-hack](https://crates.io/crates/cargo-hack) validates that all combinations of crate features work correctly.
+- [cargo-udeps](https://crates.io/crates/cargo-udeps) detects unused dependencies in Cargo.toml files.
+- [miri](https://github.com/rust-lang/miri) validates the correctness of unsafe code.
 
 ### Compiler Lints
 
-The Rust compiler generally produces exceptionally good diagnostics. In addition to the default set of diagnostics, projects
-should explicitly enable the following set of compiler lints:
+The Rust compiler generally produces exceptionally good diagnostics. In addition to the default set of diagnostics,
+projects should explicitly enable the following set of compiler lints:
 
 ```toml
 [lints.rust]
@@ -62,8 +64,8 @@ unused_lifetimes = "warn"
 
 ### Clippy Lints
 
-For clippy, projects should enable all major lint categories, and additionally enable some lints from the `restriction` lint group.
-Undesired lints (e.g., numeric casts) can be opted back out of on a case-by-case basis:
+For clippy, projects should enable all major lint categories, and additionally enable some lints from the `restriction`
+lint group. Undesired lints (e.g., numeric casts) can be opted back out of on a case-by-case basis:
 
 ```toml
 [lints.clippy]
@@ -108,15 +110,14 @@ literal_string_with_formatting_args = "allow"
 # ...
 ```
 
-
 ## Lint overrides should use `#[expect]` (M-LINT-OVERRIDE-EXPECT) { #M-LINT-OVERRIDE-EXPECT }
 
 <why>a current, tidy lint set.</why>
 
 When overriding project-global lints inside a submodule or item, you should do so via `#[expect]`, not `#[allow]`.
 
-Expected lints emit a warning if the marked warning was not encountered, thus preventing the accumulation of stale lints.
-That said, `#[allow]` lints are still useful when applied to generated code, and can appear in macros.
+Expected lints emit a warning if the marked warning was not encountered, thus preventing the accumulation of stale
+lints. That said, `#[allow]` lints are still useful when applied to generated code, and can appear in macros.
 
 Overrides should be accompanied by a `reason`:
 
@@ -126,7 +127,6 @@ pub async fn ping_server() {
   // Stubbed out for now
 }
 ```
-
 
 ## Public types are Debug (M-PUBLIC-DEBUG) { #M-PUBLIC-DEBUG }
 
@@ -139,8 +139,8 @@ All public types exposed by a crate should implement `Debug`. Most types can do 
 struct Endpoint(String);
 ```
 
-Types designed to hold sensitive data should also implement `Debug`, but do so via a custom implementation.
-This implementation must employ unit tests to ensure sensitive data isn't actually leaked, and will not be in the future.
+Types designed to hold sensitive data should also implement `Debug`, but do so via a custom implementation. This
+implementation must employ unit tests to ensure sensitive data isn't actually leaked, and will not be in the future.
 
 ```rust
 use std::fmt::{Debug, Formatter};
@@ -164,44 +164,46 @@ fn test() {
 }
 ```
 
-
 ## Public types meant to be read are Display (M-PUBLIC-DISPLAY) { #M-PUBLIC-DISPLAY }
 
 <why>usability.</why>
 
-If your type is expected to be read by upstream consumers, be it developers or end users, it should implement `Display`. This in particular includes:
+If your type is expected to be read by upstream consumers, be it developers or end users, it should implement `Display`.
+This in particular includes:
 
 - Error types, which are mandated by `std::error::Error` to implement `Display`
 - Wrappers around string-like data
 
-Implementations of `Display` should follow Rust customs; this includes rendering newlines and escape sequences.
-The handling of sensitive data outlined in [M-PUBLIC-DEBUG] applies analogously.
+Implementations of `Display` should follow Rust customs; this includes rendering newlines and escape sequences. The
+handling of sensitive data outlined in [M-PUBLIC-DEBUG] applies analogously.
 
 [M-PUBLIC-DEBUG]: ./#M-PUBLIC-DEBUG
-
 
 ## If in doubt, split the crate (M-SMALLER-CRATES) { #M-SMALLER-CRATES }
 
 <why>fast compile times and good modularity.</why>
 
-You should err on the side of having too many crates rather than too few, as this leads to dramatic compile time improvements—especially
-during the development of these crates—and prevents cyclic component dependencies.
+You should err on the side of having too many crates rather than too few, as this leads to dramatic compile time
+improvements—especially during the development of these crates—and prevents cyclic component dependencies.
 
 Essentially, if a submodule can be used independently, its contents should be moved into a separate crate.
 
-Performing this crate split may cause you to lose access to some `pub(crate)` fields or methods. In many situations, this is a desirable
-side-effect and should prompt you to design more flexible abstractions that would give your users similar affordances.
+Performing this crate split may cause you to lose access to some `pub(crate)` fields or methods. In many situations,
+this is a desirable side-effect and should prompt you to design more flexible abstractions that would give your users
+similar affordances.
 
-In some cases, it is desirable to re-join individual crates back into a single _umbrella crate_, such as when dealing with proc macros, or runtimes.
-Functionality split for technical reasons (e.g., a `foo_proc` proc macro crate) should always be re-exported. Otherwise, re-exports should be used sparingly.
+In some cases, it is desirable to re-join individual crates back into a single _umbrella crate_, such as when dealing
+with proc macros, or runtimes. Functionality split for technical reasons (e.g., a `foo_proc` proc macro crate) should
+always be re-exported. Otherwise, re-exports should be used sparingly.
 
 > ### <tip></tip> Features vs. Crates
 >
-> As a rule of thumb, crates are for items that can reasonably be used on their own. Features should unlock extra functionality that
-> can't live on its own. In the case of umbrella crates, see below, features may also be used to enable constituents (but then that functionality
-> was extracted into crates already).
+> As a rule of thumb, crates are for items that can reasonably be used on their own. Features should unlock extra
+> functionality that can't live on its own. In the case of umbrella crates, see below, features may also be used to
+> enable constituents (but then that functionality was extracted into crates already).
 >
-> For example, if you defined a `web` crate with the following modules, users only needing client calls would also have to pay for the compilation of server code:
+> For example, if you defined a `web` crate with the following modules, users only needing client calls would also have
+> to pay for the compilation of server code:
 >
 > ```text
 > web::server
@@ -217,13 +219,12 @@ Functionality split for technical reasons (e.g., a `foo_proc` proc macro crate) 
 > web_protocols
 > ```
 
-
 ## Names are free of weasel words (M-WEASEL-WORDS) { #M-WEASEL-WORDS }
 
 <why>readability.</why>
 
-Symbol names, especially type and trait names, should be free of weasel words that do not meaningfully
-add information. Common offenders include `Service`, `Manager`, and `Factory`.
+Symbol names, especially type and trait names, should be free of weasel words that do not meaningfully add information.
+Common offenders include `Service`, `Manager`, and `Factory`.
 
 While your library may very well contain or communicate with a booking service&mdash;or even hold an `HttpClient`
 instance named `booking_service`&mdash;one should rarely encounter a `BookingService` _type_ in code.
@@ -231,18 +232,18 @@ instance named `booking_service`&mdash;one should rarely encounter a `BookingSer
 An item handling many bookings can just be called `Bookings`. If it does anything more specific, then that quality
 should be appended instead. It submits these items elsewhere? Calling it `BookingDispatcher` would be more helpful.
 
-The same is true for `Manager`s. All code manages _something_, so that moniker is rarely useful. With rare
-exceptions, life cycle issues should likewise not be made the subject of some manager. Items are created in whatever
-way they are needed, their disposal is governed by `Drop`, and only `Drop`.
+The same is true for `Manager`s. All code manages _something_, so that moniker is rarely useful. With rare exceptions,
+life cycle issues should likewise not be made the subject of some manager. Items are created in whatever way they are
+needed, their disposal is governed by `Drop`, and only `Drop`.
 
-Regarding factories, at least the term should be avoided. While the concept `FooFactory` has its use, its canonical
-Rust name is `Builder` (compare [M-INIT-BUILDER](../libs/ux/#M-INIT-BUILDER)). A builder that can produce items repeatedly is still a builder.
+Regarding factories, at least the term should be avoided. While the concept `FooFactory` has its use, its canonical Rust
+name is `Builder` (compare [M-INIT-BUILDER](../libs/ux/#M-INIT-BUILDER)). A builder that can produce items repeatedly is
+still a builder.
 
 In addition, accepting factories (builders) as parameters is an unidiomatic import of OO concepts into Rust. If
-repeatable instantiation is required, functions should ask for an `impl Fn() -> Foo` over a `FooBuilder` or
-similar. In contrast, standalone builders have their use, but primarily to reduce parametric permutation complexity
-around optional values (again, [M-INIT-BUILDER](../libs/ux/#M-INIT-BUILDER)).
-
+repeatable instantiation is required, functions should ask for an `impl Fn() -> Foo` over a `FooBuilder` or similar. In
+contrast, standalone builders have their use, but primarily to reduce parametric permutation complexity around optional
+values (again, [M-INIT-BUILDER](../libs/ux/#M-INIT-BUILDER)).
 
 ## Names of items are short (M-SHORT-NAMES) { #M-SHORT-NAMES }
 
@@ -251,11 +252,13 @@ around optional values (again, [M-INIT-BUILDER](../libs/ux/#M-INIT-BUILDER)).
 The Rust convention that item identifiers are short should be followed:
 
 - identifiers should not compound more than 2 short words (`AppConfig` over `GlobalApplicationConfig`),
-- module or crate information shouldn't be baked into prefixes (`foo::Id` over `foo::FooId`), in particular when the direct 'super' item is sufficiently descriptive - in these cases users are expected to disambiguate items locally via qualifiers where needed (`fn convert(foo::Id) -> bar::Id`).
+- module or crate information shouldn't be baked into prefixes (`foo::Id` over `foo::FooId`), in particular when the
+  direct 'super' item is sufficiently descriptive - in these cases users are expected to disambiguate items locally via
+  qualifiers where needed (`fn convert(foo::Id) -> bar::Id`).
 - abbreviations are preferred (`CallbackFn` over `CallbackFunction`),
 
-Any of these rules can be broken where it makes local sense, but on a per-crate bases these exceptions should be _exceptional_ and well motivated.
-
+Any of these rules can be broken where it makes local sense, but on a per-crate bases these exceptions should be
+_exceptional_ and well motivated.
 
 ## Prefer regular over associated functions (M-REGULAR-FN) { #M-REGULAR-FN }
 
@@ -263,8 +266,9 @@ Any of these rules can be broken where it makes local sense, but on a per-crate 
 
 Associated functions should primarily be used for instance creation, not general purpose computation.
 
-In contrast to some OO languages, regular functions are first-class citizens in Rust and need no module or _class_ to host them. Functionality that
-does not clearly belong to a receiver should therefore not reside in a type's `impl` block:
+In contrast to some OO languages, regular functions are first-class citizens in Rust and need no module or _class_ to
+host them. Functionality that does not clearly belong to a receiver should therefore not reside in a type's `impl`
+block:
 
 ```rust, ignore
 struct Database {}
@@ -286,7 +290,8 @@ impl Database {
 fn check_parameters(p: &str) {}
 ```
 
-Regular functions are more idiomatic, and reduce unnecessary noise on the caller side. Associated trait functions are perfectly idiomatic though:
+Regular functions are more idiomatic, and reduce unnecessary noise on the caller side. Associated trait functions are
+perfectly idiomatic though:
 
 ```rust
 pub trait Default {
@@ -299,7 +304,6 @@ impl Default for Foo {
     fn default() -> Self { Self }
 }
 ```
-
 
 ## Magic values are documented (M-DOCUMENTED-MAGIC) { #M-DOCUMENTED-MAGIC }
 
@@ -334,22 +338,20 @@ wait_timeout(60 * 60 * 24).await // Large enough value to ensure the server
 const UPSTREAM_SERVER_TIMEOUT: Duration = Duration::from_secs(60 * 60 * 24);
 ```
 
-
 ## Use structured logging with message templates (M-LOG-STRUCTURED) { #M-LOG-STRUCTURED }
 
 <why>low-cost logging with strong filtering.</why>
 
-Logging should use structured events with named properties and message templates following
-the [message templates](https://messagetemplates.org/) specification.
+Logging should use structured events with named properties and message templates following the
+[message templates](https://messagetemplates.org/) specification.
 
-> **Note:** Examples use the [`tracing`](https://docs.rs/tracing/) crate's `event!` macro,
-but these principles apply to any logging API that supports structured logging (e.g., `log`,
-`slog`, custom telemetry systems).
+> **Note:** Examples use the [`tracing`](https://docs.rs/tracing/) crate's `event!` macro, but these principles apply to
+> any logging API that supports structured logging (e.g., `log`, `slog`, custom telemetry systems).
 
 ### Avoid String Formatting
 
-String formatting allocates memory at runtime. Message templates defer formatting until viewing time.
-We recommend that message template includes all named properties for easier inspection at viewing time.
+String formatting allocates memory at runtime. Message templates defer formatting until viewing time. We recommend that
+message template includes all named properties for easier inspection at viewing time.
 
 ```rust,ignore
 // Bad: String formatting causes allocations
@@ -365,8 +367,8 @@ event!(
 );
 ```
 
-> **Note**: Use the `{{property}}` syntax in message templates which preserves the literal text
-> while escaping Rust's format syntax. String formatting is deferred until logs are viewed.
+> **Note**: Use the `{{property}}` syntax in message templates which preserves the literal text while escaping Rust's
+> format syntax. String formatting is deferred until logs are viewed.
 
 ### Name Your Events
 
@@ -393,8 +395,8 @@ Named events enable grouping and filtering across log entries.
 
 ### Follow OpenTelemetry Semantic Conventions
 
-Use [OTel semantic conventions](https://opentelemetry.io/docs/specs/semconv/) for common attributes if needed.
-This enables standardization and interoperability.
+Use [OTel semantic conventions](https://opentelemetry.io/docs/specs/semconv/) for common attributes if needed. This
+enables standardization and interoperability.
 
 ```rust,ignore
 event!(
@@ -441,7 +443,8 @@ event!(
 ```
 
 Sensitive data includes email addresses, file paths revealing user identity, filenames containing secrets or tokens,
-file contents with PII, temporary file paths with session IDs and more. Consider using the [`data_privacy`](https://crates.io/crates/data_privacy) crate for consistent redaction.
+file contents with PII, temporary file paths with session IDs and more. Consider using the
+[`data_privacy`](https://crates.io/crates/data_privacy) crate for consistent redaction.
 
 ### Further Reading
 

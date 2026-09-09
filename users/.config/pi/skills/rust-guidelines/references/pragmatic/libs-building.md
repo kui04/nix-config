@@ -2,15 +2,15 @@
 
 # Library Building (Pragmatic Rust Guidelines)
 
-
 ## Libraries work out of the box (M-OOBE) { #M-OOBE }
 
 <why>easy adoption across the Rust ecosystem.</why>
 
-Libraries must _just work_ on all supported platforms, with the exception of libraries that are expressly platform or target specific.
+Libraries must _just work_ on all supported platforms, with the exception of libraries that are expressly platform or
+target specific.
 
-Rust crates often come with dozens of dependencies, applications with 100's. Users expect `cargo build` and `cargo install`
-to _just work_. Consider this installation of `bat` that pulls in ~250 dependencies:
+Rust crates often come with dozens of dependencies, applications with 100's. Users expect `cargo build` and
+`cargo install` to _just work_. Consider this installation of `bat` that pulls in ~250 dependencies:
 
 ```text
 Compiling writeable v0.5.5
@@ -34,8 +34,8 @@ Building [==>                       ] 29/251: icu_locid_transform_data, serde, w
 
 This compilation, like practically all other applications and libraries, will _just work_.
 
-While there are tools targeting specific functionality (e.g., a Wayland compositor) or platform crates like
-`windows`; unless a crate is _obviously_ platform specific, the expectation is that it will otherwise _just work_.
+While there are tools targeting specific functionality (e.g., a Wayland compositor) or platform crates like `windows`;
+unless a crate is _obviously_ platform specific, the expectation is that it will otherwise _just work_.
 
 This means crates must build, ultimately
 
@@ -44,41 +44,45 @@ This means crates must build, ultimately
 
 <footnotes>
 
-<sup>1</sup> It is ok to not support Tier 1 platforms "for now", but abstractions must be present so support can easily be extended. This is usually
-done by introducing an internal `HAL` ([Hardware Abstraction Layer](https://en.wikipedia.org/wiki/HAL_(software))) module with a `dummy` fallback target.<br/>
-<sup>2</sup> A default Rust installation will also have `cc` and a linker present.
+<sup>1</sup> It is ok to not support Tier 1 platforms "for now", but abstractions must be present so support can easily
+be extended. This is usually done by introducing an internal `HAL`
+([Hardware Abstraction Layer](<https://en.wikipedia.org/wiki/HAL_(software)>)) module with a `dummy` fallback
+target.<br/> <sup>2</sup> A default Rust installation will also have `cc` and a linker present.
 
 </footnotes>
 
-In particular, non-platform crates must not, by default, require the user to install additional tools, or expect environment variables
-to compile. If tools were somehow needed (like the generation of Rust from `.proto` files) these tools should be run as part of the
-publishing workflow or earlier, and the resulting artifacts (e.g., `.rs` files) be contained inside the published crate.
+In particular, non-platform crates must not, by default, require the user to install additional tools, or expect
+environment variables to compile. If tools were somehow needed (like the generation of Rust from `.proto` files) these
+tools should be run as part of the publishing workflow or earlier, and the resulting artifacts (e.g., `.rs` files) be
+contained inside the published crate.
 
-If a dependency is known to be platform specific, the parent must use conditional (platform) compilation or opt-in feature gates.
+If a dependency is known to be platform specific, the parent must use conditional (platform) compilation or opt-in
+feature gates.
 
 > **<alert></alert> Libraries are Responsible for Their Dependencies.**
 >
-> Imagine you author a `Copilot` crate, which in turn uses an `HttpClient`, which in turn depends on a `perl` script to compile.
+> Imagine you author a `Copilot` crate, which in turn uses an `HttpClient`, which in turn depends on a `perl` script to
+> compile.
 >
-> Then every one of your users, and your user's users, and everyone above, would need to install Perl to compile _their_ crate. In large projects you would
-> have 100's of people who don't know or don't care about your library or Perl, encounter a cryptic compilation error, and now have to figure out how to
-> install it on their system.
+> Then every one of your users, and your user's users, and everyone above, would need to install Perl to compile _their_
+> crate. In large projects you would have 100's of people who don't know or don't care about your library or Perl,
+> encounter a cryptic compilation error, and now have to figure out how to install it on their system.
 >
-> In practical terms, such behavior is largely a self-inflicted death sentence in the open source space, since the moment alternatives
-> are available, people will switch to those that _just work_.
-
+> In practical terms, such behavior is largely a self-inflicted death sentence in the open source space, since the
+> moment alternatives are available, people will switch to those that _just work_.
 
 ## Native `-sys` crates compile without dependencies (M-SYS-CRATES) { #M-SYS-CRATES }
 
 <why>libraries that just work on all platforms.</why>
 
-If you author a pair of `foo` and `foo-sys` crates wrapping a native `foo.lib`, you are likely to run into the issues described
-in [M-OOBE].
+If you author a pair of `foo` and `foo-sys` crates wrapping a native `foo.lib`, you are likely to run into the issues
+described in [M-OOBE].
 
 Follow these steps to produce a crate that _just works_ across platforms:
 
 - [ ] fully govern the build of `foo.lib` from `build.rs` inside `foo-sys`. Only use hand-crafted compilation via the
-  [cc](https://crates.io/crates/cc) crate, do _not_ run Makefiles or external build scripts, as that will require the installation of external dependencies,
+      [cc](https://crates.io/crates/cc) crate, do _not_ run Makefiles or external build scripts, as that will require
+      the installation of external dependencies,
 - [ ] make all external tools optional, such as `nasm`,
 - [ ] embed the upstream source code in your crate,
 - [ ] make the embedded sources verifiable (e.g., include Git URL + hash),
@@ -87,21 +91,24 @@ Follow these steps to produce a crate that _just works_ across platforms:
 
 Deviations from these points can work, and can be considered on a case-by-case basis:
 
-If the native build system is available as an _OOBE_ crate, that can be used instead of `cc` invocations. The same applies to external tools.
+If the native build system is available as an _OOBE_ crate, that can be used instead of `cc` invocations. The same
+applies to external tools.
 
-Source code might have to be downloaded if it does not fit crates.io size limitations. In any case, only servers with an availability
-comparable to crates.io should be used. In addition, the specific hashes of acceptable downloads should be stored in the crate and verified.
+Source code might have to be downloaded if it does not fit crates.io size limitations. In any case, only servers with an
+availability comparable to crates.io should be used. In addition, the specific hashes of acceptable downloads should be
+stored in the crate and verified.
 
-Downloading sources can fail on hermetic build environments, therefore alternative source roots should also be specifiable (e.g., via environment variables).
+Downloading sources can fail on hermetic build environments, therefore alternative source roots should also be
+specifiable (e.g., via environment variables).
 
 [M-OOBE]: ./#M-OOBE
-
 
 ## Features are additive (M-FEATURES-ADDITIVE) { #M-FEATURES-ADDITIVE }
 
 <why>reliable compilation in large, complex projects.</why>
 
-All library features must be additive, and any combination must work, as long as the feature itself would work on the current platform. This implies:
+All library features must be additive, and any combination must work, as long as the feature itself would work on the
+current platform. This implies:
 
 - [ ] You must not introduce a `no-std` feature, use a `std` feature instead
 - [ ] Adding any feature `foo` must not disable or modify any public item

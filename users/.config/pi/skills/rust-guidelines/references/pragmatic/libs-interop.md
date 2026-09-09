@@ -2,7 +2,6 @@
 
 # Library Interoperability (Pragmatic Rust Guidelines)
 
-
 ## Types are Send (M-TYPES-SEND) { #M-TYPES-SEND }
 
 <why>use in Tokio and behind runtime abstractions.</why>
@@ -35,8 +34,8 @@ const fn assert_send<T: Send>() {}
 const _: () = assert_send::<Foo>();
 ```
 
-When returning futures implicitly through `async` method calls, you should make sure these are `Send` too.
-You do not have to test every single method, but you should at least validate your main entry points.
+When returning futures implicitly through `async` method calls, you should make sure these are `Send` too. You do not
+have to test every single method, but you should at least validate your main entry points.
 
 ```rust,edition2021
 async fn foo() { }
@@ -48,7 +47,8 @@ _ = assert_send(foo());
 
 ### Regular Types
 
-Most regular types should be `Send`, as they otherwise infect futures turning them `!Send` if held across `.await` points.
+Most regular types should be `Send`, as they otherwise infect futures turning them `!Send` if held across `.await`
+points.
 
 ```rust,edition2021
 # use std::rc::Rc;
@@ -61,7 +61,8 @@ async fn foo() {
 }
 ```
 
-That said, if the default use of your type is _instantaneous_, and there is no reason for it to be otherwise held across `.await` boundaries, it may be `!Send`.
+That said, if the default use of your type is _instantaneous_, and there is no reason for it to be otherwise held across
+`.await` boundaries, it may be `!Send`.
 
 ```rust,edition2021
 # use std::rc::Rc;
@@ -80,13 +81,14 @@ async fn foo() {
 
 > ### <tip></tip> The Cost of Send
 >
-> Ideally, there would be abstractions that are `Send` in work-stealing runtimes, and `!Send` in thread-per-core models based on non-atomic
-> types like `Rc` and `RefCell` instead.
+> Ideally, there would be abstractions that are `Send` in work-stealing runtimes, and `!Send` in thread-per-core models
+> based on non-atomic types like `Rc` and `RefCell` instead.
 >
-> Practically these abstractions don't exist, preventing Tokio compatibility in the non-atomic case. That in turn means you would have to
-> "reinvent the world" to get anything done in a thread-per-core universe.
+> Practically these abstractions don't exist, preventing Tokio compatibility in the non-atomic case. That in turn means
+> you would have to "reinvent the world" to get anything done in a thread-per-core universe.
 >
-> The good news is, in most cases atomics and uncontended locks only have a measurable impact if accessed more frequently than every 64 words or so.
+> The good news is, in most cases atomics and uncontended locks only have a measurable impact if accessed more
+> frequently than every 64 words or so.
 >
 > <div style="background-color:white;">
 >
@@ -94,16 +96,17 @@ async fn foo() {
 >
 > </div>
 >
-> Working with a large `Vec<AtomicUsize>` in a hot loop is a bad idea, but doing the occasional uncontended atomic operation from otherwise thread-per-core
-> async code has no performance impact, but gives you widespread ecosystem compatibility.
-
+> Working with a large `Vec<AtomicUsize>` in a hot loop is a bad idea, but doing the occasional uncontended atomic
+> operation from otherwise thread-per-core async code has no performance impact, but gives you widespread ecosystem
+> compatibility.
 
 ## Native escape hatches (M-ESCAPE-HATCHES) { #M-ESCAPE-HATCHES }
 
 <why>workarounds for unsupported use cases until alternatives exist.</why>
 
-Types wrapping native handles should provide `unsafe` escape hatches. In interop scenarios your users might have gotten a native handle from somewhere
-else, or they might have to pass your wrapped handle over FFI. To enable these use cases you should provide `unsafe` conversion methods.
+Types wrapping native handles should provide `unsafe` escape hatches. In interop scenarios your users might have gotten
+a native handle from somewhere else, or they might have to pass your wrapped handle over FFI. To enable these use cases
+you should provide `unsafe` conversion methods.
 
 ```rust
 # type HNATIVE = *const u8;
@@ -129,61 +132,65 @@ impl Handle {
 }
 ```
 
-
 ## Don't leak external types (M-DONT-LEAK-TYPES) { #M-DONT-LEAK-TYPES }
 
 <why>stable APIs and low long-term maintenance cost.</why>
 
-Where possible, you should prefer `std`<sup>1</sup> types in public APIs over types coming from external crates. Exceptions should be carefully considered.
+Where possible, you should prefer `std`<sup>1</sup> types in public APIs over types coming from external crates.
+Exceptions should be carefully considered.
 
 Any type in any public API will become part of that API's contract. Since `std` and constituents are the only crates
-shipped by default, and since they come with a permanent stability guarantee, their types are the only ones that come without an interoperability risk.
+shipped by default, and since they come with a permanent stability guarantee, their types are the only ones that come
+without an interoperability risk.
 
 A crate that exposes another crate's type is said to _leak_ that type.
 
-For maximal long term stability your crate should, theoretically, not leak any types. Practically, some leakage
-is unavoidable, sometimes even beneficial. We recommend you follow this heuristic:
+For maximal long term stability your crate should, theoretically, not leak any types. Practically, some leakage is
+unavoidable, sometimes even beneficial. We recommend you follow this heuristic:
 
 - [ ] if you can avoid it, do not leak third-party types
 - [ ] if you are part of an umbrella crate,<sup>2</sup> you may freely leak types from sibling crates.
 - [ ] behind a relevant feature flag, types may be leaked (e.g., `serde`)
-- [ ] without a feature _only_ if they give a _substantial benefit_. Most commonly that is interoperability with significant
-      other parts of the Rust ecosystem based around these types.
+- [ ] without a feature _only_ if they give a _substantial benefit_. Most commonly that is interoperability with
+      significant other parts of the Rust ecosystem based around these types.
 
 <footnotes>
 
-<sup>1</sup> In rare instances, e.g., high performance libraries used from embedded, you might even want to limit yourself to `core` only.
+<sup>1</sup> In rare instances, e.g., high performance libraries used from embedded, you might even want to limit
+yourself to `core` only.
 
-<sup>2</sup> For example, a `runtime` crate might be the umbrella of `runtime_rt`, `runtime_app` and `runtime_clock` As users are
-expected to only interact with the umbrella, siblings may leak each others types.
+<sup>2</sup> For example, a `runtime` crate might be the umbrella of `runtime_rt`, `runtime_app` and `runtime_clock` As
+users are expected to only interact with the umbrella, siblings may leak each others types.
 
 </footnotes>
-
 
 ## Items come from their original crate (M-FOREIGN-REEXPORTS) { #M-FOREIGN-REEXPORTS }
 
 <why>unambiguous type identity.</why>
 
-Crates should generally not re-export items from other crates. For example, if your crate contains a method `foo::download(url: bar::Url)`, you should not do `pub use bar::Url` from inside `foo`. This avoids having possibly dozens of aliases in context, which can get confusing for both users and agents, in particular if these are mixed with genuinely different types of the same name from other crates.
+Crates should generally not re-export items from other crates. For example, if your crate contains a method
+`foo::download(url: bar::Url)`, you should not do `pub use bar::Url` from inside `foo`. This avoids having possibly
+dozens of aliases in context, which can get confusing for both users and agents, in particular if these are mixed with
+genuinely different types of the same name from other crates.
 
-When a crate accepts or returns a type defined in some third-party crate, users are expected to depend on that third-party crate directly and import the type from there. That said, there are a few valid exceptions to this rule:
+When a crate accepts or returns a type defined in some third-party crate, users are expected to depend on that
+third-party crate directly and import the type from there. That said, there are a few valid exceptions to this rule:
 
 - Umbrella crates (compare [M-DONT-LEAK-TYPES](./#M-DONT-LEAK-TYPES)) by definition re-export other types
 - Crates split for technical reasons (e.g., exporting `foo_core::Url` from `foo`)
 - Macro use to provide stable paths, e.g., via some hidden `foo::__private::Url`
-
 
 ## Accept `impl AsRef<>` where feasible (M-IMPL-ASREF) { #M-IMPL-ASREF }
 
 <why>flexibility for callers to use their own types.</why>
 
 In **function** signatures, accept `impl AsRef<T>` for types that have a
-[clear reference hierarchy](https://doc.rust-lang.org/stable/std/convert/trait.AsRef.html#implementors), where you
-do not need to take ownership, or where object creation is relatively cheap.
+[clear reference hierarchy](https://doc.rust-lang.org/stable/std/convert/trait.AsRef.html#implementors), where you do
+not need to take ownership, or where object creation is relatively cheap.
 
-| Instead of ... | accept ... |
-| --- | --- |
-| `&str`, `String` | `impl AsRef<str>` |
+| Instead of ...     | accept ...         |
+| ------------------ | ------------------ |
+| `&str`, `String`   | `impl AsRef<str>`  |
 | `&Path`, `PathBuf` | `impl AsRef<Path>` |
 | `&[u8]`, `Vec<u8>` | `impl AsRef<[u8]>` |
 
@@ -218,7 +225,6 @@ struct User {
 }
 ```
 
-
 ## Accept `impl RangeBounds<>` where feasible (M-IMPL-RANGEBOUNDS) { #M-IMPL-RANGEBOUNDS }
 
 <why>flexibility and clarity when specifying ranges.</why>
@@ -245,13 +251,13 @@ fn select_range(r: Range<usize>) {}
 fn select_any(r: impl RangeBounds<usize>) {}
 ```
 
-
 ## Accept `impl 'IO'` where feasible ('sans IO') (M-IMPL-IO) { #M-IMPL-IO }
 
-<why>business logic untangled from I/O, with N*M composability.</why>
+<why>business logic untangled from I/O, with N\*M composability.</why>
 
-Functions and types that only need to perform one-shot I/O during initialization should be written "[sans-io](https://www.firezone.dev/blog/sans-io)",
-and accept some `impl T`, where `T` is the appropriate I/O trait, effectively outsourcing I/O work to another type:
+Functions and types that only need to perform one-shot I/O during initialization should be written
+"[sans-io](https://www.firezone.dev/blog/sans-io)", and accept some `impl T`, where `T` is the appropriate I/O trait,
+effectively outsourcing I/O work to another type:
 
 ```rust,ignore
 // Bad, caller must provide a File to parse the given data. If this
@@ -271,8 +277,8 @@ fn parse_data(data: impl std::io::Read) {}
 ```
 
 Synchronous functions should use [`std::io::Read`](https://doc.rust-lang.org/std/io/trait.Read.html) and
-[`std::io::Write`](https://doc.rust-lang.org/std/io/trait.Write.html). Asynchronous _functions_ targeting more than one runtime should use
-[`futures::io::AsyncRead`](https://docs.rs/futures/latest/futures/io/trait.AsyncRead.html) and similar.
-_Types_ that need to perform runtime-specific, continuous I/O should follow [M-RUNTIME-ABSTRACTED] instead.
+[`std::io::Write`](https://doc.rust-lang.org/std/io/trait.Write.html). Asynchronous _functions_ targeting more than one
+runtime should use [`futures::io::AsyncRead`](https://docs.rs/futures/latest/futures/io/trait.AsyncRead.html) and
+similar. _Types_ that need to perform runtime-specific, continuous I/O should follow [M-RUNTIME-ABSTRACTED] instead.
 
 [M-RUNTIME-ABSTRACTED]: ./#M-RUNTIME-ABSTRACTED

@@ -2,26 +2,28 @@
 
 # FFI (Pragmatic Rust Guidelines)
 
-
 ## Isolate DLL state between FFI libraries (M-ISOLATE-DLL-STATE) { #M-ISOLATE-DLL-STATE }
 
 <why>data integrity and defined behavior across DLL boundaries.</why>
 
-When loading multiple Rust-based dynamic libraries (DLLs) within one application, you may only share 'portable' state between these libraries.
-Likewise, when authoring such libraries, you must only accept or provide 'portable' data from foreign DLLs.
+When loading multiple Rust-based dynamic libraries (DLLs) within one application, you may only share 'portable' state
+between these libraries. Likewise, when authoring such libraries, you must only accept or provide 'portable' data from
+foreign DLLs.
 
-Portable here means data that is safe and consistent to process regardless of its origin. By definition, this is a subset of FFI-safe types.
-A type is portable if it is `#[repr(C)]` (or similarly well-defined), and _all_ of the following:
+Portable here means data that is safe and consistent to process regardless of its origin. By definition, this is a
+subset of FFI-safe types. A type is portable if it is `#[repr(C)]` (or similarly well-defined), and _all_ of the
+following:
 
 - It must not have any interaction with any `static` or thread local.
 - It must not have any interaction with any `TypeId`.
-- It must not contain any value, pointer or reference to any non-portable data (it is valid to point into portable data within non-portable data, such as
-  sharing a reference to an ASCII string held in a `Box`).
+- It must not contain any value, pointer or reference to any non-portable data (it is valid to point into portable data
+  within non-portable data, such as sharing a reference to an ASCII string held in a `Box`).
 
-_Interaction_ means any computational relationship, and therefore also relates to how the type is used. Sending a `u128` between DLLs is OK, using it to
-exchange a transmuted `TypeId` isn't.
+_Interaction_ means any computational relationship, and therefore also relates to how the type is used. Sending a `u128`
+between DLLs is OK, using it to exchange a transmuted `TypeId` isn't.
 
-The underlying issue stems from the Rust compiler treating each DLL as an entirely new compilation artifact, akin to a standalone application. This means each DLL:
+The underlying issue stems from the Rust compiler treating each DLL as an entirely new compilation artifact, akin to a
+standalone application. This means each DLL:
 
 - has its own set of `static` and thread-local variables,
 - the type layout of any `#[repr(Rust)]` type (the default) can differ between compilations,
@@ -34,7 +36,8 @@ Notably, this affects:
 - ⚠️ any struct not `#[repr(C)]`,
 - ⚠️ any data structure relying on consistent `TypeId`.
 
-In practice, transferring any of the above between libraries leads to data loss, state corruption, and usually undefined behavior.
+In practice, transferring any of the above between libraries leads to data loss, state corruption, and usually undefined
+behavior.
 
 Take particular note that this may also apply to types and methods that are invisible at the FFI boundary:
 
@@ -54,14 +57,17 @@ fn use_common_service(common: &CommonService) {
 }
 ```
 
-
 ## Business logic belongs in core crates, FFI only translates (M-FFI-TRANSLATES) { #M-FFI-TRANSLATES }
 
 <why>maximal safe code and a clean separation of concerns.</why>
 
-When Rust is used to create FFI libraries, there should be a clear separation of concerns between the core _business logic_ crate `foo` and the glue crate `foo-ffi`.
+When Rust is used to create FFI libraries, there should be a clear separation of concerns between the core _business
+logic_ crate `foo` and the glue crate `foo-ffi`.
 
-Any operational functionality belongs in the core crate and should be expressed as idiomatic, safe, testable Rust. The FFI crate exists only to translate between native Rust and C constructs, and the core crate must not be infected with interop concerns, even if this means repeating, and slightly adjusting, type and function signatures. For example, given the following type in the core crate `foo`:
+Any operational functionality belongs in the core crate and should be expressed as idiomatic, safe, testable Rust. The
+FFI crate exists only to translate between native Rust and C constructs, and the core crate must not be infected with
+interop concerns, even if this means repeating, and slightly adjusting, type and function signatures. For example, given
+the following type in the core crate `foo`:
 
 ```rust,ignore
 pub struct Message {
@@ -92,7 +98,9 @@ pub unsafe extern "C" fn transmit_message(
 }
 ```
 
-However, it would be improper to leak FFI requirements into `foo` itself: ownership, data models and signatures do not translate seamlessly between the two worlds. Any time _saved_ by skipping a clean split will have to be paid back many times over during refactorings down the line.
+However, it would be improper to leak FFI requirements into `foo` itself: ownership, data models and signatures do not
+translate seamlessly between the two worlds. Any time _saved_ by skipping a clean split will have to be paid back many
+times over during refactorings down the line.
 
 ```rust
 #[repr(C)]
@@ -104,7 +112,6 @@ pub struct Message {
 }
 ```
 
-
 ## FFI crates follow established naming conventions (M-FFI-NAMING) { #M-FFI-NAMING }
 
 <why>immediately recognizable crate roles across projects.</why>
@@ -114,4 +121,5 @@ Crates used for FFI should follow established naming practices:
 - `-sys` for crates defining items to call into existing (C-style) libraries
 - `-ffi` for crates defining (C-style) items when called from existing applications
 
-There are slight variations of this scheme (e.g., `-sys2` when a previous `-sys` crate was abandoned and using `-` vs `_`), but overall `-ffi` clearly defines 'export' libraries, and `-sys` 'import' ones.
+There are slight variations of this scheme (e.g., `-sys2` when a previous `-sys` crate was abandoned and using `-` vs
+`_`), but overall `-ffi` clearly defines 'export' libraries, and `-sys` 'import' ones.

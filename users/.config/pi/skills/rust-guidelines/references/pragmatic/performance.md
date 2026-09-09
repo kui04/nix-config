@@ -2,15 +2,15 @@
 
 # Performance (Pragmatic Rust Guidelines)
 
-
 ## Optimize for throughput, avoid empty cycles (M-THROUGHPUT) { #M-THROUGHPUT }
 
 <why>COGS savings at scale.</why>
 
 You should optimize your library for throughput, and one of your key metrics should be _items per CPU cycle_.
 
-This does not mean to neglect latency&mdash;after all you can scale for throughput, but not for latency. However,
-in most cases you should not pay for latency with _empty cycles_ that come with single-item processing, contended locks and frequent task switching.
+This does not mean to neglect latency&mdash;after all you can scale for throughput, but not for latency. However, in
+most cases you should not pay for latency with _empty cycles_ that come with single-item processing, contended locks and
+frequent task switching.
 
 Ideally, you should
 
@@ -32,7 +32,6 @@ Shared state should only be used if the cost of sharing is less than the cost of
 
 [M-YIELD-POINTS]: ./#M-YIELD-POINTS
 
-
 ## Identify, profile, optimize the hot path early (M-HOTPATH) { #M-HOTPATH }
 
 <why>high-performance code.</why>
@@ -44,11 +43,13 @@ You should, early in the development process, identify if your crate is performa
 - document or communicate the most performance sensitive areas.
 
 For benchmarks we recommend [criterion](https://crates.io/crates/criterion) or [divan](https://crates.io/crates/divan).
-If possible, benchmarks should not only measure elapsed wall time, but also used CPU time over all threads (this unfortunately
-requires manual work and is not supported out of the box by the common benchmark utils).
+If possible, benchmarks should not only measure elapsed wall time, but also used CPU time over all threads (this
+unfortunately requires manual work and is not supported out of the box by the common benchmark utils).
 
-Profiling Rust on Windows works out of the box with [Intel VTune](https://www.intel.com/content/www/us/en/developer/tools/oneapi/vtune-profiler.html)
-and [Superluminal](https://superluminal.eu/). However, to gain meaningful CPU insights you should enable debug symbols for benchmarks in your `Cargo.toml`:
+Profiling Rust on Windows works out of the box with
+[Intel VTune](https://www.intel.com/content/www/us/en/developer/tools/oneapi/vtune-profiler.html) and
+[Superluminal](https://superluminal.eu/). However, to gain meaningful CPU insights you should enable debug symbols for
+benchmarks in your `Cargo.toml`:
 
 ```toml
 [profile.bench]
@@ -72,9 +73,8 @@ sharing screenshots of your latest profiling hot spots.
 > - repeated re-hashing of equal data structures
 > - the use of Rust's default hasher where collision resistance wasn't an issue
 >
-> Anecdotally, we have seen ~15% benchmark gains on hot paths where only some of these `String`  problems were
-> addressed, and it appears that up to 50% could be achieved in highly optimized versions.
-
+> Anecdotally, we have seen ~15% benchmark gains on hot paths where only some of these `String` problems were addressed,
+> and it appears that up to 50% could be achieved in highly optimized versions.
 
 ## Long-running tasks should have yield points (M-YIELD-POINTS) { #M-YIELD-POINTS }
 
@@ -82,8 +82,9 @@ sharing screenshots of your latest profiling hot spots.
 
 If you perform long running computations, they should contain `yield_now().await` points.
 
-Your future might be executed in a runtime that cannot work around blocking or long-running tasks. Even then, such tasks are
-considered bad design and cause runtime overhead. If your complex task performs I/O regularly it will simply utilize these await points to preempt itself:
+Your future might be executed in a runtime that cannot work around blocking or long-running tasks. Even then, such tasks
+are considered bad design and cause runtime overhead. If your complex task performs I/O regularly it will simply utilize
+these await points to preempt itself:
 
 ```rust, ignore
 async fn process_items(items: &[items]) {
@@ -94,7 +95,8 @@ async fn process_items(items: &[items]) {
 }
 ```
 
-If your task performs long-running CPU operations without intermixed I/O, it should instead cooperatively yield at regular intervals, to not starve concurrent operations:
+If your task performs long-running CPU operations without intermixed I/O, it should instead cooperatively yield at
+regular intervals, to not starve concurrent operations:
 
 ```rust, ignore
 async fn process_items(zip_file: File) {
@@ -106,26 +108,28 @@ async fn process_items(zip_file: File) {
 }
 ```
 
-If the number and duration of your individual operations are unpredictable you should use APIs such as `has_budget_remaining()` and
-related APIs to query your hosting runtime.
+If the number and duration of your individual operations are unpredictable you should use APIs such as
+`has_budget_remaining()` and related APIs to query your hosting runtime.
 
 > ### <tip></tip> Yield how often?
 >
-> In a thread-per-core model the overhead of task switching must be balanced against the systemic effects of starving unrelated tasks.
+> In a thread-per-core model the overhead of task switching must be balanced against the systemic effects of starving
+> unrelated tasks.
 >
 > Under the assumption that runtime task switching takes 100's of ns, in addition to the overhead of lost CPU caches,
 > continuous execution in between should be long enough that the switching cost becomes negligible (<1%).
 >
 > Thus, performing 10 - 100μs of CPU-bound work between yield points would be a good starting point.
 
-
 ## Reuse allocations where possible (M-MEM-REUSE) { #M-MEM-REUSE }
 
 <why>low allocation overhead and fast hot paths.</why>
 
-When designing APIs you should allow users to hold onto reusable resources. Inside your code you should make use of them where available.
+When designing APIs you should allow users to hold onto reusable resources. Inside your code you should make use of them
+where available.
 
-The cost of repeated allocations inside hot loops can be significant, and from a user's perspective they can be invisible unless profiled:
+The cost of repeated allocations inside hot loops can be significant, and from a user's perspective they can be
+invisible unless profiled:
 
 ```rust,ignore
 // Bad, API design forces new allocation per element.
@@ -134,7 +138,8 @@ for id in ids {
 }
 ```
 
-While this style of API may exist for convenience, it should be auxiliary. Instead, the core APIs should allow users to own the underlying object and re-use it:
+While this style of API may exist for convenience, it should be auxiliary. Instead, the core APIs should allow users to
+own the underlying object and re-use it:
 
 ```rust,ignore
 // Good, allows users to decide whether a new allocation is needed.
@@ -144,7 +149,8 @@ for id in ids {
 }
 ```
 
-The canonical method on reusable types to reuse them is `.clear()`, as can be found on many `std` items. Multiple flavors of this pattern exist. In simple cases user-owned types can hold a preexisting, reusable collection directly:
+The canonical method on reusable types to reuse them is `.clear()`, as can be found on many `std` items. Multiple
+flavors of this pattern exist. In simple cases user-owned types can hold a preexisting, reusable collection directly:
 
 ```rust
 struct Value {
@@ -152,13 +158,14 @@ struct Value {
 }
 ```
 
-In heavyweight, deeply nested libraries it can be worthwhile to either pass a bump-style `Arena`, or to encapsulate one inside the user types, so it can be used throughout the call stack:
+In heavyweight, deeply nested libraries it can be worthwhile to either pass a bump-style `Arena`, or to encapsulate one
+inside the user types, so it can be used throughout the call stack:
 
 ```rust,ignore
 struct Query {
     arena: Arena,
     request: Request,
-    data: Vec<u8>    
+    data: Vec<u8>
 }
 
 fn client_do_work(query: &mut Query) {
@@ -167,16 +174,19 @@ fn client_do_work(query: &mut Query) {
 }
 ```
 
-
 ## Library telemetry does not tank performance (M-LOG-OVERHEAD) { #M-LOG-OVERHEAD }
 
 <why>low-overhead telemetry during diagnosis.</why>
 
-Library code that emits telemetry should ensure that doing so does not meaningfully impact throughput or latency on the hot path.
+Library code that emits telemetry should ensure that doing so does not meaningfully impact throughput or latency on the
+hot path.
 
-Crates offered to 3rd parties emitting logs or metrics should assume telemetry will be permanently enabled, or under load. Care should therefore be taken that the volume and overhead of emitted events is reasonable, and will not cause excessive performance degradation.
+Crates offered to 3rd parties emitting logs or metrics should assume telemetry will be permanently enabled, or under
+load. Care should therefore be taken that the volume and overhead of emitted events is reasonable, and will not cause
+excessive performance degradation.
 
-Hot, inner loops should preferably stay free of telemetry emission entirely. If it can't be avoided, the events emitted should be lightweight and avoid allocations (e.g., `format!` string concatenation).
+Hot, inner loops should preferably stay free of telemetry emission entirely. If it can't be avoided, the events emitted
+should be lightweight and avoid allocations (e.g., `format!` string concatenation).
 
 ```rust,ignore
 // Bad, logs each message and invokes allocation-based formatting.
@@ -189,25 +199,29 @@ for m in messages {
     log(("Emitting message", m.id()))
 }
 
-// Best: If possible, let telemetry users reconstruct what happened offline 
+// Best: If possible, let telemetry users reconstruct what happened offline
 log(("Processing message batch", messages.batch_id()))
 for m in messages { ... }
 ```
-
 
 ## Nested type hierarchies should avoid needless indirection (M-AVOID-INDIRECTION) { #M-AVOID-INDIRECTION }
 
 <why>fast, cache-friendly memory access.</why>
 
-Hot types should avoid nested heap indirection and consider lifting hot, cacheable deep fields to improve cache utilization.  
+Hot types should avoid nested heap indirection and consider lifting hot, cacheable deep fields to improve cache
+utilization.
 
-While the gold standard is to benchmark, a pattern that emerges repeatedly when porting C# code to Rust is to reflexively `Arc` nested types, often multiple layers deep. Although this can make sense on very wide or heavyweight types that genuinely need to be shared by multiple owners, this pattern can ruin access latency when multiple rounds of DRAM lookup have to be performed sequentially.
+While the gold standard is to benchmark, a pattern that emerges repeatedly when porting C# code to Rust is to
+reflexively `Arc` nested types, often multiple layers deep. Although this can make sense on very wide or heavyweight
+types that genuinely need to be shared by multiple owners, this pattern can ruin access latency when multiple rounds of
+DRAM lookup have to be performed sequentially.
 
-Where nested, shared ownership isn't strictly needed, it is usually better to start with local, embedded data, and lift cacheable fields.
+Where nested, shared ownership isn't strictly needed, it is usually better to start with local, embedded data, and lift
+cacheable fields.
 
 ```rust,ignore
-// Bad, `print` (assuming it is reasonably hot) needs 2 indirections 
-// to query whether it is enabled. 
+// Bad, `print` (assuming it is reasonably hot) needs 2 indirections
+// to query whether it is enabled.
 struct Item {
     config: Arc<Config>,
     payload: Payload,
@@ -223,7 +237,7 @@ impl Item {
     }
 }
 
-// Better: `enabled` resides nearby and is likely immediately available 
+// Better: `enabled` resides nearby and is likely immediately available
 // once `print` is called.
 struct Item {
     config: Arc<Config>,
@@ -239,14 +253,16 @@ impl Item {
 
 ```
 
-
 ## Use boxed slices and strings for immutable owned sequences (M-BOX-DST) { #M-BOX-DST }
 
 <why>low memory consumption and good cache utilization.</why>
 
-Frequently used, internal, immutable sequences that will not be resized after construction should be stored as `Box<[T]>`, `Arc<str>` or similar, rather than their original  `Vec<T>` or `String` counterparts.
+Frequently used, internal, immutable sequences that will not be resized after construction should be stored as
+`Box<[T]>`, `Arc<str>` or similar, rather than their original `Vec<T>` or `String` counterparts.
 
-Regular growable collections consist of a `(ptr, len, capacity)` triple. Converting them to boxed slices makes them immutable, executes a [shrink-to-fit](./#M-SHRINK-TO-FIT), and drops the `capacity` bit, reducing their handle size by 1/3.  For this pattern to be useful, the following preconditions should apply:
+Regular growable collections consist of a `(ptr, len, capacity)` triple. Converting them to boxed slices makes them
+immutable, executes a [shrink-to-fit](./#M-SHRINK-TO-FIT), and drops the `capacity` bit, reducing their handle size by
+1/3. For this pattern to be useful, the following preconditions should apply:
 
 - the sequence should be frequently instantiated (e.g., >1000's of instances),
 - it must be immutable,
@@ -256,26 +272,28 @@ Some collections provide dedicated methods for this, e.g., `String::into_boxed_s
 
 ```rust,ignore
 // Bad, with many entries this wastes space and makes
-// traversal ultimately slower. 
+// traversal ultimately slower.
 struct Data {
     ids: Vec<String>
 }
 
-// Good, reduces memory consumption and fits more elements 
+// Good, reduces memory consumption and fits more elements
 // into cache.
 struct Data {
     ids: Vec<Box<str>>
 }
 ```
 
-
 ## Shrink collections to fit after building (M-SHRINK-TO-FIT) { #M-SHRINK-TO-FIT }
 
 <why>a minimal memory footprint.</why>
 
-Where large, long-lived, growable collections such as `Vec` or `String` were built without an exact size reservation (compare [M-INITIAL-CAPACITY](./#M-INITIAL-CAPACITY)), the resulting collection should be shrunk via `shrink_to_fit` before storing it.
+Where large, long-lived, growable collections such as `Vec` or `String` were built without an exact size reservation
+(compare [M-INITIAL-CAPACITY](./#M-INITIAL-CAPACITY)), the resulting collection should be shrunk via `shrink_to_fit`
+before storing it.
 
-Many Rust collections grow by powers of two when iteratively adding elements. In the worst case a collection might therefore use ~2x of its needed memory.
+Many Rust collections grow by powers of two when iteratively adding elements. In the worst case a collection might
+therefore use ~2x of its needed memory.
 
 ```rust,ignore
 // Bad, long lived object might end up using 2x needed memory.
@@ -288,18 +306,21 @@ for x in large_iter {
 long_lived.shrink_to_fit();
 ```
 
-Note that this does not apply to conversions done via `into_boxed_*` and friends (compare [M-BOX-DST](./#M-BOX-DST)), as these generally shrink before converting already.
-
+Note that this does not apply to conversions done via `into_boxed_*` and friends (compare [M-BOX-DST](./#M-BOX-DST)), as
+these generally shrink before converting already.
 
 ## Use a fast hasher where possible (M-FAST-HASHER) { #M-FAST-HASHER }
 
 <why>hashing performance.</why>
 
-When hashing trusted, internal keys, prefer a fast non-cryptographic hasher (e.g., `foldhash`, `FxHash`) over the standard library default.
+When hashing trusted, internal keys, prefer a fast non-cryptographic hasher (e.g., `foldhash`, `FxHash`) over the
+standard library default.
 
-Rust's default hasher is reasonably DoS safe on untrusted user input, but this comes at a performance penalty. If you can trust that keys are not maliciously crafted to overflow individual buckets, a custom fast hasher can yield significant performance gains.
+Rust's default hasher is reasonably DoS safe on untrusted user input, but this comes at a performance penalty. If you
+can trust that keys are not maliciously crafted to overflow individual buckets, a custom fast hasher can yield
+significant performance gains.
 
-```rust,ignore
+````rust,ignore
 // Bad, uses default hasher for keys we control.
 let lookup = HashMap::<UserID, Data>::with_capacity(1024);
 
@@ -327,21 +348,22 @@ let mut rval = Vec::with_capacity(other.len());
 for x in &other {
     rval.push(convert(x));
 }
-```
+````
 
-Iterator-driven construction (`collect`) inherits this behavior via `size_hint` and should be preferred over manual `push` loops when possible:
+Iterator-driven construction (`collect`) inherits this behavior via `size_hint` and should be preferred over manual
+`push` loops when possible:
 
 ```rust,ignore
 // Ideal, looks nicer and is performant
 let rval: Vec<_> = other.iter().map(convert).collect();
 ```
 
-
 ## Hot `async` functions reduce stack size (M-ASYNC-STACK-SIZE) { #M-ASYNC-STACK-SIZE }
 
 <why>small async stack sizes and low memcpy overhead.</why>
 
-Functions marked `async` in the hot path should track their future sizes, and take one or more of the following steps to reduce their impact:
+Functions marked `async` in the hot path should track their future sizes, and take one or more of the following steps to
+reduce their impact:
 
 - reduction of parameter and rval type size,
 - reduction of type size of items held across `.await` points,
@@ -349,11 +371,16 @@ Functions marked `async` in the hot path should track their future sizes, and ta
 
 > ### <tip></tip> Future 'Stack' Sizes
 >
-> In Futures, what would naively be considered _their stack_, is actually part of a significantly more complicated machinery under their  hood.
+> In Futures, what would naively be considered _their stack_, is actually part of a significantly more complicated
+> machinery under their hood.
 >
-> Regular locals, that only live momentarily between two `.await` points, still remain part of the runtime thread's regular stack. However, any locals that live across `.await` points, or parameters passed during construction, become part of that Future's state machine type, and the layout of this type is currently not as optimized as it could be.
+> Regular locals, that only live momentarily between two `.await` points, still remain part of the runtime thread's
+> regular stack. However, any locals that live across `.await` points, or parameters passed during construction, become
+> part of that Future's state machine type, and the layout of this type is currently not as optimized as it could be.
 >
-> This not only can cause stack-to-heap memcpy operations when creating or boxing Futures, it can also force large upfront stack sizes of the hypothetical most deeply nested cross-async call stack of the involved async function (which, on a side note, is why they can't simply recurse).
+> This not only can cause stack-to-heap memcpy operations when creating or boxing Futures, it can also force large
+> upfront stack sizes of the hypothetical most deeply nested cross-async call stack of the involved async function
+> (which, on a side note, is why they can't simply recurse).
 >
 > ```rust,ignore
 > async fn foo(_large: Large) {
@@ -365,18 +392,20 @@ Functions marked `async` in the hot path should track their future sizes, and ta
 >     dbg!(&within_future);
 >     // <- `sneaky` dropped here, despite otherwise not being used!
 > }
-> 
-> let future = foo(Large::new()); // `Large` becomes embedded in `foo` type, 
+>
+> let future = foo(Large::new()); // `Large` becomes embedded in `foo` type,
 >                                 // blowing up its size, despite it not even
 >                                 // being used.
-> 
-> // Here, despite `foo` not running yet, we might consume up to `Large` + 
-> // 2kb of this thread's stack memory. Once we spawn this is memcpy'ed 
+>
+> // Here, despite `foo` not running yet, we might consume up to `Large` +
+> // 2kb of this thread's stack memory. Once we spawn this is memcpy'ed
 > // to runtime Task structure:
 > rt.spawn(future);
->```
+> ```
 
-For many async functions this isn't an issue, as their associated `Future`-cost is negligible. However, functions used along the hot path, that are either called or instantiated frequently (e.g., 1000's of calls per second or concurrent tasks) might benefit from monitoring and optimizations.
+For many async functions this isn't an issue, as their associated `Future`-cost is negligible. However, functions used
+along the hot path, that are either called or instantiated frequently (e.g., 1000's of calls per second or concurrent
+tasks) might benefit from monitoring and optimizations.
 
 Hot futures should be tracked via `size_of_val`:
 
@@ -393,22 +422,22 @@ fn has_reasonable_size() {
 Then consider a combination of the following:
 
 ```rust,ignore
-// 1) Return an `impl Future` instead, this prevents large arguments 
+// 1) Return an `impl Future` instead, this prevents large arguments
 //    from infecting the future size, among others.
-fn hot(args: Args) -> impl Future<Output = Result<T>> { 
+fn hot(args: Args) -> impl Future<Output = Result<T>> {
     // 2) Process arguments outside async context if processing does
     //    not require async functionality.
-    let args = args.do_something(); 
+    let args = args.do_something();
 
     if args.invalid() {
         // 3) Use `Either` to return a single `impl Future` type, as
-        //    otherwise you'd have to invent a new type. 
-        async { Err(InvalidArgs) }.left_future() 
+        //    otherwise you'd have to invent a new type.
+        async { Err(InvalidArgs) }.left_future()
     } else {
-        // 4) Chain future invocations via future helpers, which again 
-        //    prevents heavy locals from being passed through the state 
+        // 4) Chain future invocations via future helpers, which again
+        //    prevents heavy locals from being passed through the state
         //    machine.
-        read(args).then(|x| foo(x)).right_future() 
+        read(args).then(|x| foo(x)).right_future()
     }
 }
 ```

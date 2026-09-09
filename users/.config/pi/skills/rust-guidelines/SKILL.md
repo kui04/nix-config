@@ -1,99 +1,111 @@
 ---
 name: rust-guidelines
-description: Idiomatic Rust playbook merging Microsoft's Pragmatic Rust Guidelines with the official Rust API Guidelines, Rust Style Guide, Rust Design Patterns, and the Rust Reference's undefined-behavior rules. Use for any Rust work — writing, reviewing, refactoring, or designing code; crate and API design; naming; error handling; unsafe and FFI; macros; async; performance; rustdoc; workspace layout — and trigger even when the user never mentions guidelines and only asks to write, fix, review, optimize, or make Rust code more idiomatic.
+description:
+  Idiomatic Rust playbook merging Microsoft's Pragmatic Rust Guidelines with the official Rust API Guidelines, Rust
+  Style Guide, Rust Design Patterns, and the Rust Reference's undefined-behavior rules. Use for any Rust work — writing,
+  reviewing, refactoring, or designing code; crate and API design; naming; error handling; unsafe and FFI; macros;
+  async; performance; rustdoc; workspace layout — and trigger even when the user never mentions guidelines and only asks
+  to write, fix, review, optimize, or make Rust code more idiomatic.
 ---
 
 # Rust Guidelines
 
 A consolidated rulebook for idiomatic, scalable Rust, built verbatim from five sources:
 
-| ID prefix | Source | Content |
-|-----------|--------|---------|
-| `M-*` | [Pragmatic Rust Guidelines](https://microsoft.github.io/rust-guidelines) (Microsoft, v2026.6) | pragmatic design rules for libraries, apps, FFI, correctness, performance |
-| `C-*` | [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/checklist.html) (rust-lang) | official library API conventions |
-| — | [Rust Style Guide](https://doc.rust-lang.org/nightly/style-guide/) | formatting rules beyond what rustfmt enforces |
-| — | [Rust Design Patterns](https://rust-unofficial.github.io/patterns/) | idioms, patterns, anti-patterns |
-| — | [Rust Reference — Undefined Behavior](https://doc.rust-lang.org/reference/behavior-considered-undefined.html) | what is and is not UB |
+| ID prefix | Source                                                                                                        | Content                                                                   |
+| --------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `M-*`     | [Pragmatic Rust Guidelines](https://microsoft.github.io/rust-guidelines) (Microsoft, v2026.6)                 | pragmatic design rules for libraries, apps, FFI, correctness, performance |
+| `C-*`     | [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/checklist.html) (rust-lang)                  | official library API conventions                                          |
+| —         | [Rust Style Guide](https://doc.rust-lang.org/nightly/style-guide/)                                            | formatting rules beyond what rustfmt enforces                             |
+| —         | [Rust Design Patterns](https://rust-unofficial.github.io/patterns/)                                           | idioms, patterns, anti-patterns                                           |
+| —         | [Rust Reference — Undefined Behavior](https://doc.rust-lang.org/reference/behavior-considered-undefined.html) | what is and is not UB                                                     |
 
 The full text lives under `references/`; load only the files relevant to the task with the `read` tool.
 
 ## How to use this skill
 
-- **Writing or designing code**: before writing a public API, crate, or module, `read` the matching files from the routing table below and design to satisfy them. Cite the rule ID (e.g. `C-GETTER`, `M-FROM-ERROR`) in comments or explanations when a non-obvious choice follows from one.
-- **Reviewing code**: walk the master checklist below; for anything touched by the diff, load the corresponding reference file and check the full rules. Report violations with their ID and *why* (each guideline states its rationale in a `<why>` block or "Advantages/Disadvantages" section).
-- **Golden rule**: each rule exists for a reason; the spirit counts, not the letter. Understand why a rule exists before working around it, and do not follow a rule blindly when doing so would violate its underlying motivation. Project-local config (`rustfmt.toml`, `clippy.toml`, CONTRIBUTING) outranks these books.
+- **Writing or designing code**: before writing a public API, crate, or module, `read` the matching files from the
+  routing table below and design to satisfy them. Cite the rule ID (e.g. `C-GETTER`, `M-FROM-ERROR`) in comments or
+  explanations when a non-obvious choice follows from one.
+- **Reviewing code**: walk the master checklist below; for anything touched by the diff, load the corresponding
+  reference file and check the full rules. Report violations with their ID and _why_ (each guideline states its
+  rationale in a `<why>` block or "Advantages/Disadvantages" section).
+- **Golden rule**: each rule exists for a reason; the spirit counts, not the letter. Understand why a rule exists before
+  working around it, and do not follow a rule blindly when doing so would violate its underlying motivation.
+  Project-local config (`rustfmt.toml`, `clippy.toml`, CONTRIBUTING) outranks these books.
 
 ## Routing table — which reference file to load
 
 **Pragmatic Rust Guidelines** (`references/pragmatic/`):
 
-| File | Load when |
-|------|-----------|
-| `universal.md` | any Rust code — naming, weasel words, docs of magic values, structured logging, static verification, lint policy |
-| `libs-ux.md` | designing library APIs: canonical error structs, builders, module layout, `async fn`, inherent vs trait methods |
-| `libs-interop.md` | public types and trait impls: `Send`, `AsRef`, `RangeBounds`, sans-IO generics, re-exports |
-| `libs-resilience.md` | testability, strong types/newtypes, avoiding statics, integration tests, mockable syscalls |
-| `libs-building.md` | cargo features, `-sys` crates, out-of-the-box builds |
-| `macros.md` | writing or reviewing declarative or proc macros |
-| `apps.md` | binaries: anyhow-style errors, mimalloc, target-cpu |
-| `ffi.md` | FFI boundary crates, DLL state, FFI naming |
-| `correctness.md` | **always load when `unsafe` or panics are involved** — soundness, UB, panic policy |
-| `performance.md` | hot paths, allocation reuse, hashers, capacity, async stack size, yield points |
-| `project.md` | workspace layout, Cargo.toml inheritance, editions, MSRV |
-| `docs.md` | writing rustdoc: first sentence, module docs, canonical sections |
-| `ai.md` | AI-assisted codebases: single-item paths, LLM-consumable design, non-tautological tests |
+| File                 | Load when                                                                                                        |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `universal.md`       | any Rust code — naming, weasel words, docs of magic values, structured logging, static verification, lint policy |
+| `libs-ux.md`         | designing library APIs: canonical error structs, builders, module layout, `async fn`, inherent vs trait methods  |
+| `libs-interop.md`    | public types and trait impls: `Send`, `AsRef`, `RangeBounds`, sans-IO generics, re-exports                       |
+| `libs-resilience.md` | testability, strong types/newtypes, avoiding statics, integration tests, mockable syscalls                       |
+| `libs-building.md`   | cargo features, `-sys` crates, out-of-the-box builds                                                             |
+| `macros.md`          | writing or reviewing declarative or proc macros                                                                  |
+| `apps.md`            | binaries: anyhow-style errors, mimalloc, target-cpu                                                              |
+| `ffi.md`             | FFI boundary crates, DLL state, FFI naming                                                                       |
+| `correctness.md`     | **always load when `unsafe` or panics are involved** — soundness, UB, panic policy                               |
+| `performance.md`     | hot paths, allocation reuse, hashers, capacity, async stack size, yield points                                   |
+| `project.md`         | workspace layout, Cargo.toml inheritance, editions, MSRV                                                         |
+| `docs.md`            | writing rustdoc: first sentence, module docs, canonical sections                                                 |
+| `ai.md`              | AI-assisted codebases: single-item paths, LLM-consumable design, non-tautological tests                          |
 
 **Rust API Guidelines** (`references/api-guidelines/`):
 
-| File | Load when |
-|------|-----------|
-| `checklist.md` | full `C-*` checklist — start here for any library/API review |
-| `naming.md` | naming anything: casing, `as_`/`to_`/`into_`, getters, iterators, features |
+| File                  | Load when                                                                        |
+| --------------------- | -------------------------------------------------------------------------------- |
+| `checklist.md`        | full `C-*` checklist — start here for any library/API review                     |
+| `naming.md`           | naming anything: casing, `as_`/`to_`/`into_`, getters, iterators, features       |
 | `interoperability.md` | common traits, `From`/`AsRef`, serde, error types, `Send`/`Sync`, `Read`/`Write` |
-| `predictability.md` | constructors, smart pointers, `Deref`, operator overloads, `into_inner()` |
-| `flexibility.md` | generic vs dyn, borrowed arguments, minimal trait bounds, object safety |
-| `type-safety.md` | newtypes, builders, validation, dropping invariants |
-| `dependability.md` | argument validation, destructors that must not fail |
-| `debuggability.md` | `Debug`/`Display` on public types |
-| `documentation.md` | rustdoc: examples, panics/errors/safety sections, links |
-| `macros.md` | macro API etiquette: evocative input, item placement, `macro_rules` hygiene |
-| `future-proofing.md` | sealed traits, `non_exhaustive`, semver-proofing, prelude design |
-| `necessities.md` | stability guarantees, licensing, versioning baseline |
+| `predictability.md`   | constructors, smart pointers, `Deref`, operator overloads, `into_inner()`        |
+| `flexibility.md`      | generic vs dyn, borrowed arguments, minimal trait bounds, object safety          |
+| `type-safety.md`      | newtypes, builders, validation, dropping invariants                              |
+| `dependability.md`    | argument validation, destructors that must not fail                              |
+| `debuggability.md`    | `Debug`/`Display` on public types                                                |
+| `documentation.md`    | rustdoc: examples, panics/errors/safety sections, links                          |
+| `macros.md`           | macro API etiquette: evocative input, item placement, `macro_rules` hygiene      |
+| `future-proofing.md`  | sealed traits, `non_exhaustive`, semver-proofing, prelude design                 |
+| `necessities.md`      | stability guarantees, licensing, versioning baseline                             |
 
-**Rust Style Guide** (`references/style-guide/`) — only for what rustfmt does *not* already enforce:
+**Rust Style Guide** (`references/style-guide/`) — only for what rustfmt does _not_ already enforce:
 
-| File | Load when |
-|------|-----------|
-| `general.md` | core formatting principles and general advice |
-| `items.md` | laying out fn/struct/enum/impl/trait definitions, imports, attributes |
-| `expressions.md` | formatting expressions, chains, control flow, matches |
-| `statements.md` | `let`/`let-else`, assignments, single-line vs blocks |
-| `types.md` | formatting type annotations and bounds |
+| File                    | Load when                                                               |
+| ----------------------- | ----------------------------------------------------------------------- |
+| `general.md`            | core formatting principles and general advice                           |
+| `items.md`              | laying out fn/struct/enum/impl/trait definitions, imports, attributes   |
+| `expressions.md`        | formatting expressions, chains, control flow, matches                   |
+| `statements.md`         | `let`/`let-else`, assignments, single-line vs blocks                    |
+| `types.md`              | formatting type annotations and bounds                                  |
 | `cargo-and-editions.md` | Cargo.toml style, edition-specific idioms, nightly-only rustfmt options |
 
 **Rust Design Patterns** (`references/patterns/`):
 
-| File | Load when |
-|------|-----------|
-| `idioms.md` | everyday code: constructors, `Default`, borrowed args, `mem::take/replace`, temp mutability, on-stack dispatch |
-| `idioms-ffi.md` | passing/accepting strings and errors across FFI |
-| `patterns-behavioural.md` | Command, Interpreter, Newtype, RAII guards, Strategy, Visitor |
-| `patterns-creational.md` | Builder, Fold |
-| `patterns-structural.md` | composing structs, small crates, containing unsafety, trait-for-bounds |
-| `patterns-ffi.md` | object-based FFI APIs, handle wrappers |
-| `anti-patterns.md` | clone-to-satisfy-borrow-checker, `#![deny(warnings)]`, Deref polymorphism |
-| `functional.md` | generics as type classes, optics/lenses, FP paradigms in Rust |
-| `design-principles.md` | SOLID and general design principles mapped to Rust |
+| File                      | Load when                                                                                                      |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `idioms.md`               | everyday code: constructors, `Default`, borrowed args, `mem::take/replace`, temp mutability, on-stack dispatch |
+| `idioms-ffi.md`           | passing/accepting strings and errors across FFI                                                                |
+| `patterns-behavioural.md` | Command, Interpreter, Newtype, RAII guards, Strategy, Visitor                                                  |
+| `patterns-creational.md`  | Builder, Fold                                                                                                  |
+| `patterns-structural.md`  | composing structs, small crates, containing unsafety, trait-for-bounds                                         |
+| `patterns-ffi.md`         | object-based FFI APIs, handle wrappers                                                                         |
+| `anti-patterns.md`        | clone-to-satisfy-borrow-checker, `#![deny(warnings)]`, Deref polymorphism                                      |
+| `functional.md`           | generics as type classes, optics/lenses, FP paradigms in Rust                                                  |
+| `design-principles.md`    | SOLID and general design principles mapped to Rust                                                             |
 
 **Rust Reference** (`references/`):
 
-| File | Load when |
-|------|-----------|
-| `undefined-behavior.md` | mandatory before/while writing or reviewing any `unsafe`; also lists what is *not* UB |
+| File                    | Load when                                                                             |
+| ----------------------- | ------------------------------------------------------------------------------------- |
+| `undefined-behavior.md` | mandatory before/while writing or reviewing any `unsafe`; also lists what is _not_ UB |
 
 ## Master checklist — Pragmatic Rust Guidelines
 
-Compact version of the full checklist; details and rationale live in the `references/pragmatic/` file named in each header.
+Compact version of the full checklist; details and rationale live in the `references/pragmatic/` file named in each
+header.
 
 - **Universal** (`universal.md`)
   - [ ] Follow the upstream guidelines (M-UPSTREAM-GUIDELINES)
@@ -204,17 +216,28 @@ From M-UPSTREAM-GUIDELINES; the full `C-*` list is in `references/api-guidelines
 
 - [ ] Ad-hoc conversions follow `as_`, `to_`, `into_` conventions (C-CONV)
 - [ ] Getter names follow Rust convention — `foo()`, not `get_foo()` (C-GETTER)
-- [ ] Types eagerly implement common traits (C-COMMON-TRAITS): `Copy`, `Clone`, `Eq`, `PartialEq`, `Ord`, `PartialOrd`, `Hash`, `Default`, `Debug`, plus `Display` where the type wants to be displayed
+- [ ] Types eagerly implement common traits (C-COMMON-TRAITS): `Copy`, `Clone`, `Eq`, `PartialEq`, `Ord`, `PartialOrd`,
+      `Hash`, `Default`, `Debug`, plus `Display` where the type wants to be displayed
 - [ ] Constructors are static, inherent methods (C-CTOR) — have `Foo::new()` even if `Foo::default()` exists
 - [ ] Feature names are free of placeholder words like `use-`, `with-`, `support` (C-FEATURE)
 
 ## Gotchas
 
-- **rustfmt first**: run rustfmt; consult `references/style-guide/` only for layout rustfmt cannot decide (e.g. chain breaking, import granularity with nightly options) — and check the project's `rustfmt.toml` before advising changes.
-- **`unsafe` discipline**: every `unsafe` block needs a written safety justification (M-UNSAFE), and unsafe code that can cause UB from safe callers is unsound (M-UNSOUND). When judging whether something is UB, load `references/undefined-behavior.md` — do not guess from memory; the list is precise and includes provenance, aliasing, and invalid-value rules.
-- **Deref polymorphism feels clever but is an anti-pattern** (`references/patterns/anti-patterns.md`); only smart pointers implement `Deref`/`DerefMut` (C-DEREF).
-- **`#![deny(warnings)]` in library code is an anti-pattern** — it breaks downstream builds on newer compilers; gate warnings in CI instead (M-STATIC-VERIFICATION uses `#[expect]`, not blanket allows).
-- **Panics are for bugs, not recoverable failures** (M-PANIC-IS-STOP, M-PANIC-ON-BUG); libraries return canonical error structs convertible with `From` (M-ERRORS-CANONICAL-STRUCTS, M-FROM-ERROR), applications may use anyhow (M-APP-ERROR).
-- **Naming**: no `get_` prefixes (C-GETTER), no weasel words like `Manager`/`Util`/`Helper` (M-WEASEL-WORDS), conversions pick `as_`/`to_`/`into_` by cost and ownership (C-CONV).
-- **Use pattern names in explanations** (e.g. "this is a Newtype", "use an RAII guard") so reviews stay searchable against `references/patterns/`.
-- **Books evolve**: rule IDs are stable, but when a suggestion seems to conflict between sources, prefer the more specific rule and state the conflict to the user rather than silently picking one.
+- **rustfmt first**: run rustfmt; consult `references/style-guide/` only for layout rustfmt cannot decide (e.g. chain
+  breaking, import granularity with nightly options) — and check the project's `rustfmt.toml` before advising changes.
+- **`unsafe` discipline**: every `unsafe` block needs a written safety justification (M-UNSAFE), and unsafe code that
+  can cause UB from safe callers is unsound (M-UNSOUND). When judging whether something is UB, load
+  `references/undefined-behavior.md` — do not guess from memory; the list is precise and includes provenance, aliasing,
+  and invalid-value rules.
+- **Deref polymorphism feels clever but is an anti-pattern** (`references/patterns/anti-patterns.md`); only smart
+  pointers implement `Deref`/`DerefMut` (C-DEREF).
+- **`#![deny(warnings)]` in library code is an anti-pattern** — it breaks downstream builds on newer compilers; gate
+  warnings in CI instead (M-STATIC-VERIFICATION uses `#[expect]`, not blanket allows).
+- **Panics are for bugs, not recoverable failures** (M-PANIC-IS-STOP, M-PANIC-ON-BUG); libraries return canonical error
+  structs convertible with `From` (M-ERRORS-CANONICAL-STRUCTS, M-FROM-ERROR), applications may use anyhow (M-APP-ERROR).
+- **Naming**: no `get_` prefixes (C-GETTER), no weasel words like `Manager`/`Util`/`Helper` (M-WEASEL-WORDS),
+  conversions pick `as_`/`to_`/`into_` by cost and ownership (C-CONV).
+- **Use pattern names in explanations** (e.g. "this is a Newtype", "use an RAII guard") so reviews stay searchable
+  against `references/patterns/`.
+- **Books evolve**: rule IDs are stable, but when a suggestion seems to conflict between sources, prefer the more
+  specific rule and state the conflict to the user rather than silently picking one.

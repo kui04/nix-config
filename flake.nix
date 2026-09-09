@@ -49,11 +49,29 @@
               "-i"
               "4"
             ];
-            includes = [ "*.sh" ];
+            includes = [
+              "*.sh"
+              "**/*.sh"
+            ];
+          };
+          formatter.prettier = {
+            command = "prettier";
+            options = [
+              "--write"
+              "--print-width"
+              "120"
+              "--prose-wrap"
+              "always"
+            ];
+            includes = [
+              "*.md"
+              "**/*.md"
+            ];
           };
         };
         runtimeInputs = [
           nixpkgs.legacyPackages.x86_64-linux.shfmt
+          nixpkgs.legacyPackages.x86_64-linux.prettier
         ];
       };
 

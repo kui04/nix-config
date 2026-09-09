@@ -2,13 +2,12 @@
 
 # Library Resilience (Pragmatic Rust Guidelines)
 
-
 ## I/O and system calls are mockable (M-MOCKABLE-SYSCALLS) { #M-MOCKABLE-SYSCALLS }
 
 <why>testable edge cases that are otherwise hard to evoke.</why>
 
-Any user-facing type doing I/O, or sys calls with side effects, should be mockable to these effects. This includes file and
-network access, clocks, entropy sources and seeds, and similar. More generally, any operation that is
+Any user-facing type doing I/O, or sys calls with side effects, should be mockable to these effects. This includes file
+and network access, clocks, entropy sources and seeds, and similar. More generally, any operation that is
 
 - non-deterministic,
 - reliant on external state,
@@ -19,12 +18,12 @@ should be mockable.
 
 > ### <tip></tip> Mocking Allocations?
 >
-> Unless you write kernel code or similar, you can consider allocations to be deterministic, hardware independent and practically
-> infallible, thus not covered by this guideline.
+> Unless you write kernel code or similar, you can consider allocations to be deterministic, hardware independent and
+> practically infallible, thus not covered by this guideline.
 >
-> However, this does _not_ mean you should expect there to be unlimited memory available. While it is ok to
-> accept caller provided input as-is if your library has a _reasonable_ memory complexity, memory-hungry libraries
-> and code handling external input should provide bounded and / or chunking operations.
+> However, this does _not_ mean you should expect there to be unlimited memory available. While it is ok to accept
+> caller provided input as-is if your library has a _reasonable_ memory complexity, memory-hungry libraries and code
+> handling external input should provide bounded and / or chunking operations.
 
 This guideline has several implications for libraries, they
 
@@ -33,7 +32,8 @@ This guideline has several implications for libraries, they
 - should not create their own I/O or sys call _core_ themselves
 - should not offer `MyIoLibrary::default()` constructors
 
-Instead, libraries performing I/O and sys calls should either accept some I/O _core_ that is mockable already, or provide mocking functionality themselves:
+Instead, libraries performing I/O and sys calls should either accept some I/O _core_ that is mockable already, or
+provide mocking functionality themselves:
 
 ```rust, ignore
 let lib = Library::new_runtime(runtime_io); // mockable I/O functionality passed in
@@ -53,8 +53,8 @@ impl Library {
 }
 ```
 
-Behind the scenes, `LibraryCore` is a non-public enum, similar to [M-RUNTIME-ABSTRACTED], that either dispatches
-calls to the respective sys call, or to an mocking controller.
+Behind the scenes, `LibraryCore` is a non-public enum, similar to [M-RUNTIME-ABSTRACTED], that either dispatches calls
+to the respective sys call, or to an mocking controller.
 
 ```rust, ignore
 // Dispatches calls either to the operating system, or to a
@@ -99,7 +99,8 @@ mod mock {
 }
 ```
 
-Runtime-aware libraries already build on top of the [M-RUNTIME-ABSTRACTED] pattern should extend their runtime enum instead:
+Runtime-aware libraries already build on top of the [M-RUNTIME-ABSTRACTED] pattern should extend their runtime enum
+instead:
 
 ```rust, ignore
 enum Runtime {
@@ -114,9 +115,9 @@ enum Runtime {
 }
 ```
 
-As indicated above, most libraries supporting mocking should not accept mock controllers, but return them via parameter tuples,
-with the first parameter being the library instance, the second the mock controller. This is to prevent state ambiguity if multiple
-instances shared a single controller:
+As indicated above, most libraries supporting mocking should not accept mock controllers, but return them via parameter
+tuples, with the first parameter being the library instance, the second the mock controller. This is to prevent state
+ambiguity if multiple instances shared a single controller:
 
 ```rust, ignore
 impl Library {
@@ -126,7 +127,6 @@ impl Library {
 ```
 
 [M-RUNTIME-ABSTRACTED]: ../ux/#M-RUNTIME-ABSTRACTED
-
 
 ## Test utilities are feature gated (M-TEST-UTIL) { #M-TEST-UTIL }
 
@@ -139,7 +139,8 @@ Testing functionality must be guarded behind a feature flag. This includes
 - safety check overrides,
 - fake data generation.
 
-We recommend you use a single flag only, named `test-util`. In any case, the feature(s) must clearly communicate they are for testing purposes.
+We recommend you use a single flag only, named `test-util`. In any case, the feature(s) must clearly communicate they
+are for testing purposes.
 
 ```rust, ignore
 impl HttpClient {
@@ -152,43 +153,45 @@ impl HttpClient {
 
 [M-MOCKABLE-SYSCALLS]: ./#M-MOCKABLE-SYSCALLS
 
-
 ## Integration tests live under `tests/` (M-INTEGRATION-TESTS) { #M-INTEGRATION-TESTS }
 
 <why>clean code files.</why>
 
 Tests that only touch public API surface are _integration tests_ and belong under `tests/`, not `mod tests {}`.
 
-In projects with coverage targets, it is not uncommon for `src/` files to contain more testing code than actual business logic. This can make browsing and understanding the code harder both in IDEs and PRs. Likewise, if a testing goal can be achieved through either an integration test or a unit test, the former is always preferred.
-
+In projects with coverage targets, it is not uncommon for `src/` files to contain more testing code than actual business
+logic. This can make browsing and understanding the code harder both in IDEs and PRs. Likewise, if a testing goal can be
+achieved through either an integration test or a unit test, the former is always preferred.
 
 ## Use the proper type family (M-STRONG-TYPES) { #M-STRONG-TYPES }
 
 <why>the right data and safety invariants, at the right time.</why>
 
-Use the appropriate `std` type for your task. In general you should use the strongest type available, as early as possible in your API flow. Common offenders are
+Use the appropriate `std` type for your task. In general you should use the strongest type available, as early as
+possible in your API flow. Common offenders are
 
-| Do not use ... | use instead ... | Explanation |
-| --- | --- | --- |
-| `String`* | `PathBuf`* | Anything dealing with the OS should be `Path`-like |
+| Do not use ... | use instead ... | Explanation                                        |
+| -------------- | --------------- | -------------------------------------------------- |
+| `String`\*     | `PathBuf`\*     | Anything dealing with the OS should be `Path`-like |
 
-That said, you should also follow common Rust `std` conventions. Purely numeric types at public API boundaries (e.g., `window_size()`) are expected to
-be regular numbers, not `Saturating<usize>`, `NonZero<usize>`, or similar.
+That said, you should also follow common Rust `std` conventions. Purely numeric types at public API boundaries (e.g.,
+`window_size()`) are expected to be regular numbers, not `Saturating<usize>`, `NonZero<usize>`, or similar.
 
 <footnotes>
 
-<sup>*</sup> Including their siblings, e.g., `&str`, `Path`, ...
+<sup>\*</sup> Including their siblings, e.g., `&str`, `Path`, ...
 
 </footnotes>
-
 
 ## Newtypes guard their invariants (M-STRONG-TYPES-GUARD) { #M-STRONG-TYPES-GUARD }
 
 <why>centralized correctness invariants.</why>
 
-When introducing a strong type or newtype that exists to encode an invariant (a non-empty string, a percentage, a port number, a sanitized path, ...), the type itself must enforce that invariant where applicable.
+When introducing a strong type or newtype that exists to encode an invariant (a non-empty string, a percentage, a port
+number, a sanitized path, ...), the type itself must enforce that invariant where applicable.
 
-Construction should be fallible, returning a proper error when the invariant cannot be upheld, rather than handing the responsibility off to every user:
+Construction should be fallible, returning a proper error when the invariant cannot be upheld, rather than handing the
+responsibility off to every user:
 
 ```rust,ignore
 // Bad, creates a new type but enforces nothing. Every caller now has to
@@ -219,9 +222,8 @@ This means for any newtype that is non-total:
 
 > ### <tip></tip> Why `const`?
 >
-> Const constructors allows them to be used inside `const {}` blocks, which surfaces these violations as errors. This enables
-> users to do `let month_due = const { Month::new(14) }` and avoids hitting these paths during runtime.
-
+> Const constructors allows them to be used inside `const {}` blocks, which surfaces these violations as errors. This
+> enables users to do `let month_due = const { Month::new(14) }` and avoids hitting these paths during runtime.
 
 ## Builders validate in final `.build()` (M-BUILD-RESULT) { #M-BUILD-RESULT }
 
@@ -229,7 +231,8 @@ This means for any newtype that is non-total:
 
 A builder's per-field setters should accept input without failing, final validation should be done by `.build()`.
 
-Fallible setters add noise, and still don't guard against interdependent error conditions. Where builders are fallible they should offer a `Result`-carrying `.build()` instead.
+Fallible setters add noise, and still don't guard against interdependent error conditions. Where builders are fallible
+they should offer a `Result`-carrying `.build()` instead.
 
 ```rust,ignore
 // Bad, forces repeated error checks that provide no value.
@@ -238,7 +241,7 @@ Foo::builder()
     .distance(42)?
     .build();
 
-// Good, consolidates sanity checking and allows for cross-checks 
+// Good, consolidates sanity checking and allows for cross-checks
 // between properties.
 Foo::builder()
     .name("Foo")
@@ -246,21 +249,22 @@ Foo::builder()
     .build()?;
 ```
 
-That said, individual settings should prefer strong types carrying their own validation where applicable, compare M-STRONG-TYPES-GUARD.
-
+That said, individual settings should prefer strong types carrying their own validation where applicable, compare
+M-STRONG-TYPES-GUARD.
 
 ## Don't glob re-export items (M-NO-GLOB-REEXPORTS) { #M-NO-GLOB-REEXPORTS }
 
 <why>a deliberate public surface.</why>
 
-Don't `pub use foo::*` from other modules, especially not from other crates. You might accidentally export more than you want,
-and globs are hard to review in PRs. Re-export items individually instead:
+Don't `pub use foo::*` from other modules, especially not from other crates. You might accidentally export more than you
+want, and globs are hard to review in PRs. Re-export items individually instead:
 
 ```rust,ignore
 pub use foo::{A, B, C};
 ```
 
-Glob exports are permissible for technical reasons, like doing platform specific re-exports from a set of HAL (hardware abstraction layer) modules:
+Glob exports are permissible for technical reasons, like doing platform specific re-exports from a set of HAL (hardware
+abstraction layer) modules:
 
 ```rust,ignore
 #[cfg(target_os = "windows")]
@@ -270,7 +274,7 @@ mod windows { /* ... */ }
 mod linux { /* ... */ }
 
 // Acceptable use of glob re-exports, this is a common pattern
-// and it is clear everything is just forwarded from a single 
+// and it is clear everything is just forwarded from a single
 // platform.
 
 #[cfg(target_os = "windows")]
@@ -279,7 +283,6 @@ pub use windows::*;
 #[cfg(target_os = "linux")]
 pub use linux::*;
 ```
-
 
 ## Avoid statics (M-AVOID-STATICS) { #M-AVOID-STATICS }
 
@@ -326,24 +329,25 @@ main::print_counter();
 
 At this point, what is _the_ value of said counter; `0`, `2`, `3` or `5`?
 
-The answer is, possibly any  (even multiple!) of the above, depending on the crate's version resolution!
+The answer is, possibly any (even multiple!) of the above, depending on the crate's version resolution!
 
 Under the hood Rust may link to multiple versions of the same crate, independently instantiated, to satisfy declared
-dependencies. This is especially observable during a crate's `0.x` version timeline, where each `x` constitutes a separate _major_ version.
+dependencies. This is especially observable during a crate's `0.x` version timeline, where each `x` constitutes a
+separate _major_ version.
 
-If `main`,  `library_a` and `library_b` all declared the same version of `core`, e.g. `0.5`, then the reported result will be `5`, since all
-crates actually _see_ the same version of `GLOBAL_COUNTER`.
+If `main`, `library_a` and `library_b` all declared the same version of `core`, e.g. `0.5`, then the reported result
+will be `5`, since all crates actually _see_ the same version of `GLOBAL_COUNTER`.
 
-However, if `library_a` declared `0.4` instead, then it would be linked against a separate version of `core`; thus `main` and `library_b` would
-agree on a value of `3`, while `library_a` reported `2`.
+However, if `library_a` declared `0.4` instead, then it would be linked against a separate version of `core`; thus
+`main` and `library_b` would agree on a value of `3`, while `library_a` reported `2`.
 
-Although `static` items can be useful, they are particularly dangerous before a library's stabilization, and for any state where _secret duplication_ would
-cause consistency issues when static and non-static variable use interacts. In addition, statics interfere with unit testing, and are a contention point in
-thread-per-core designs.
-
+Although `static` items can be useful, they are particularly dangerous before a library's stabilization, and for any
+state where _secret duplication_ would cause consistency issues when static and non-static variable use interacts. In
+addition, statics interfere with unit testing, and are a contention point in thread-per-core designs.
 
 ## Production code uses telemetry, not println (M-LOG-NOT-PRINT) { #M-LOG-NOT-PRINT }
 
 <why>diagnostics available where they are needed.</why>
 
-Production code paths should emit diagnostics through the project's telemetry framework rather than via `println!` or `dbg!`. Console output is reserved for CLIs that intentionally write to stdout as their user interface.
+Production code paths should emit diagnostics through the project's telemetry framework rather than via `println!` or
+`dbg!`. Console output is reserved for CLIs that intentionally write to stdout as their user interface.

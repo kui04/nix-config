@@ -2,20 +2,19 @@
 
 # Correctness (Pragmatic Rust Guidelines)
 
-
 ## Unsafe needs reason, should be avoided (M-UNSAFE) { #M-UNSAFE }
 
 <why>memory safety and a minimal attack surface.</why>
 
 You must have a valid reason to use `unsafe`. The only valid reasons are
 
-1) novel abstractions, e.g., a new smart pointer or allocator,
-1) performance, e.g., attempting to call `.get_unchecked()`,
-1) FFI and platform calls, e.g., calling into C or the kernel, ...
+1. novel abstractions, e.g., a new smart pointer or allocator,
+1. performance, e.g., attempting to call `.get_unchecked()`,
+1. FFI and platform calls, e.g., calling into C or the kernel, ...
 
-Unsafe code lowers the guardrails used by the compiler, transferring some of the compiler's responsibilities
-to the programmer. Correctness of the resulting code relies primarily on catching all mistakes in code review,
-which is error-prone. Mistakes in unsafe code may introduce high-severity security vulnerabilities.
+Unsafe code lowers the guardrails used by the compiler, transferring some of the compiler's responsibilities to the
+programmer. Correctness of the resulting code relies primarily on catching all mistakes in code review, which is
+error-prone. Mistakes in unsafe code may introduce high-severity security vulnerabilities.
 
 You must not use ad-hoc `unsafe` to
 
@@ -23,7 +22,8 @@ You must not use ad-hoc `unsafe` to
 - bypass `Send` and similar bounds, e.g., by doing `unsafe impl Send ...`,
 - bypass lifetime requirements via `transmute` and similar.
 
-Ad-hoc here means `unsafe` embedded in otherwise unrelated code. It is of course permissible to create properly designed, sound abstractions doing these things.
+Ad-hoc here means `unsafe` embedded in otherwise unrelated code. It is of course permissible to create properly
+designed, sound abstractions doing these things.
 
 In any case, `unsafe` must follow the guidelines outlined below.
 
@@ -41,8 +41,8 @@ In any case, `unsafe` must follow the guidelines outlined below.
 ### Performance
 
 - [ ] Using `unsafe` for performance reasons should only be done after benchmarking
-- [ ] Any use of `unsafe` must be accompanied by plain-text reasoning outlining its safety. This applies to both
-  calling `unsafe` methods, as well as providing `_unchecked` ones.
+- [ ] Any use of `unsafe` must be accompanied by plain-text reasoning outlining its safety. This applies to both calling
+      `unsafe` methods, as well as providing `_unchecked` ones.
 - [ ] The code in question must pass [Miri](https://github.com/rust-lang/miri)
 - [ ] You must follow the [unsafe code guidelines](https://rust-lang.github.io/unsafe-code-guidelines/)
 
@@ -59,19 +59,20 @@ In any case, `unsafe` must follow the guidelines outlined below.
 - [Miri](https://github.com/rust-lang/miri)
 - ["Adversarial code"](https://cheats.rs/#adversarial-code)
 
-
 ## All code must be sound (M-UNSOUND) { #M-UNSOUND }
 
 <why>predictable runtime behavior free of bugs and incompatibilities.</why>
 
-Unsound code is seemingly _safe_ code that may produce undefined behavior when called from other safe code, or on its own accord.
+Unsound code is seemingly _safe_ code that may produce undefined behavior when called from other safe code, or on its
+own accord.
 
 > ### <tip></tip> Meaning of 'Safe'
 >
 > The terms _safe_ and `unsafe` are technical terms in Rust.
 >
 > A function is _safe_, if its signature does not mark it `unsafe`. That said, _safe_ functions can still be dangerous
-> (e.g., `delete_database()`), and `unsafe` ones are, when properly used, usually quite benign (e.g.,`vec.get_unchecked()`).
+> (e.g., `delete_database()`), and `unsafe` ones are, when properly used, usually quite benign
+> (e.g.,`vec.get_unchecked()`).
 >
 > A function is therefore _unsound_ if it appears _safe_ (i.e., it is not marked `unsafe`), but if _any_ of its calling
 > modes would cause undefined behavior. This is to be interpreted in the strictest sense. Even if causing undefined
@@ -91,20 +92,22 @@ unsafe impl<T> Send for AlwaysSend<T> {}
 unsafe impl<T> Sync for AlwaysSend<T> {}
 ```
 
-Unsound abstractions are never permissible. If you cannot safely encapsulate something, you must expose `unsafe` functions instead, and document proper behavior.
+Unsound abstractions are never permissible. If you cannot safely encapsulate something, you must expose `unsafe`
+functions instead, and document proper behavior.
 
 <div class="warning">
 
 No Exceptions
 
-While you may break most guidelines if you have a good enough reason, there are no exceptions in this case: unsound code is never acceptable.
+While you may break most guidelines if you have a good enough reason, there are no exceptions in this case: unsound code
+is never acceptable.
 
 </div>
 
 > ### <tip></tip> It's the Module Boundaries
 >
-> Note that soundness boundaries equal module boundaries! It is perfectly fine, in an otherwise safe abstraction,
-> to have safe functions that rely on behavior guaranteed elsewhere **in the same module**.
+> Note that soundness boundaries equal module boundaries! It is perfectly fine, in an otherwise safe abstraction, to
+> have safe functions that rely on behavior guaranteed elsewhere **in the same module**.
 >
 > ```rust
 > struct MyDevice(*const u8);
@@ -124,7 +127,6 @@ While you may break most guidelines if you have a good enough reason, there are 
 >
 > ```
 
-
 ## Unsafe implies undefined behavior (M-UNSAFE-IMPLIES-UB) { #M-UNSAFE-IMPLIES-UB }
 
 <why>semantic consistency without warning fatigue.</why>
@@ -140,15 +142,15 @@ unsafe fn print_string(x: *const String) { }
 unsafe fn delete_database() { }
 ```
 
-
 ## Panic means 'stop the program' (M-PANIC-IS-STOP) { #M-PANIC-IS-STOP }
 
 <why>soundness and predictability.</why>
 
 Panics are not exceptions. Instead, they suggest immediate program termination.
 
-Although your code must be [_minimally_ panic-safe](https://doc.rust-lang.org/nomicon/exception-safety.html) (i.e., a survived panic may not lead to
-undefined state), invoking a panic means _this program should stop now_. It is not valid to:
+Although your code must be [_minimally_ panic-safe](https://doc.rust-lang.org/nomicon/exception-safety.html) (i.e., a
+survived panic may not lead to undefined state), invoking a panic means _this program should stop now_. It is not valid
+to:
 
 - use panics to communicate (errors) upstream,
 - use panics to handle self-inflicted error conditions,
@@ -161,30 +163,33 @@ For example, if the application calling you is compiled with a `Cargo.toml` cont
 panic = "abort"
 ```
 
-then any invocation of panic will cause an otherwise functioning program to needlessly abort. Valid reasons to panic are:
+then any invocation of panic will cause an otherwise functioning program to needlessly abort. Valid reasons to panic
+are:
 
 - when encountering a programming error, e.g., `x.expect("must never happen")`,
 - anything invoked from const contexts, e.g., `const { foo.unwrap() }`,
 - when user requested, e.g., providing an `unwrap()` method yourself,
-- when encountering a poison, e.g., by calling `unwrap()` on a lock result (a poisoned lock signals another thread has panicked already).
+- when encountering a poison, e.g., by calling `unwrap()` on a lock result (a poisoned lock signals another thread has
+  panicked already).
 
 Any of those are directly or indirectly linked to programming errors.
-
 
 ## Detected programming bugs are panics, not errors (M-PANIC-ON-BUG) { #M-PANIC-ON-BUG }
 
 <why>tractable error handling and runtime consistency.</why>
 
-As an extension of [M-PANIC-IS-STOP] above, when an unrecoverable programming error has been
-detected, libraries and applications must panic, i.e., request program termination.
+As an extension of [M-PANIC-IS-STOP] above, when an unrecoverable programming error has been detected, libraries and
+applications must panic, i.e., request program termination.
 
 In these cases, no `Error` type should be introduced or returned, as any such error could not be acted upon at runtime.
 
-Contract violations, i.e., the breaking of invariants either within a library or by a caller, are programming errors and must therefore panic.
+Contract violations, i.e., the breaking of invariants either within a library or by a caller, are programming errors and
+must therefore panic.
 
-However, what constitutes a violation is situational. APIs are not expected to go out of their way to detect them, as such
-checks can be impossible or expensive. Encountering `must_be_even == 3` during an already existing check clearly warrants
-a panic, while a function `parse(&str)` clearly must return a `Result`. If in doubt, we recommend you take inspiration from the standard library.
+However, what constitutes a violation is situational. APIs are not expected to go out of their way to detect them, as
+such checks can be impossible or expensive. Encountering `must_be_even == 3` during an already existing check clearly
+warrants a panic, while a function `parse(&str)` clearly must return a `Result`. If in doubt, we recommend you take
+inspiration from the standard library.
 
 ```rust, ignore
 // Generally, a function with bad parameters must either
@@ -213,14 +218,16 @@ fn parse_uri(s: &str) -> Result<Uri, ParseError> { };
 
 [M-PANIC-IS-STOP]: ./#M-PANIC-IS-STOP
 
-
 ## Panic continuation is last resort (M-PANIC-CONTINUATION) { #M-PANIC-CONTINUATION }
 
 <why>state integrity and freedom from subtle bugs.</why>
 
-Panic recovery via `catch_unwind()` is a matter of last resort and must generally be followed by a controlled application restart.
+Panic recovery via `catch_unwind()` is a matter of last resort and must generally be followed by a controlled
+application restart.
 
-Panics indicate the program has reached an unrecoverable state (compare [M-PANIC-IS-STOP](./#M-PANIC-IS-STOP) and [M-PANIC-ON-BUG](./#M-PANIC-ON-BUG)). Library code in particular should not attempt to catch a panic and continue execution, as there is a risk of observing otherwise impossible state:
+Panics indicate the program has reached an unrecoverable state (compare [M-PANIC-IS-STOP](./#M-PANIC-IS-STOP) and
+[M-PANIC-ON-BUG](./#M-PANIC-ON-BUG)). Library code in particular should not attempt to catch a panic and continue
+execution, as there is a risk of observing otherwise impossible state:
 
 ```rust,ignore
 thread_local! {
@@ -230,8 +237,8 @@ thread_local! {
 fn main() {
     let _ = panic::catch_unwind(|| {
         ALWAYS_EQUAL.with_borrow_mut(|p| {
-            p.0 += 1;        
-            panic!("Assume some user-provided closure failed here");  
+            p.0 += 1;
+            panic!("Assume some user-provided closure failed here");
             p.1 += 1;
         });
     });
@@ -242,16 +249,19 @@ fn main() {
 }
 ```
 
-Although the example above is slightly contrived, the side effects and interactions of a caught panic can be harder to identify, can have wide blast radius, and be subtle.
+Although the example above is slightly contrived, the side effects and interactions of a caught panic can be harder to
+identify, can have wide blast radius, and be subtle.
 
-Systems where many unrelated tasks are in flight (e.g., server request handlers) can use `catch_unwind` on a per-request basis, but should still promote an application restart after a request handler caused a panic. The purpose of `catch_unwind` here is not to continue execution indefinitely, but to allow all other requests to gracefully finish.
-
+Systems where many unrelated tasks are in flight (e.g., server request handlers) can use `catch_unwind` on a per-request
+basis, but should still promote an application restart after a request handler caused a panic. The purpose of
+`catch_unwind` here is not to continue execution indefinitely, but to allow all other requests to gracefully finish.
 
 ## Custom panics have a helpful message (M-PANIC-MESSAGE) { #M-PANIC-MESSAGE }
 
 <why>faster bug diagnosis.</why>
 
-When code panics intentionally (via `panic!`, `assert!`, `unreachable!`, `todo!`, or similar), a message must be present to clearly state what went wrong and, where applicable, include relevant values.
+When code panics intentionally (via `panic!`, `assert!`, `unreachable!`, `todo!`, or similar), a message must be present
+to clearly state what went wrong and, where applicable, include relevant values.
 
 ```rust,ignore
 // Bad, the panic gives the developer little to act on.
@@ -261,6 +271,7 @@ assert!(buffer.len() >= HEADER_SIZE);
 assert!(buffer.len() >= HEADER_SIZE, "buffer too small for header: got {} bytes, need {HEADER_SIZE}", buffer.len());
 ```
 
-Messages related to API misuse should be useful to the end user. Messages indicating bugs should be helpful to you-as-the-author, or whoever maintains the project after you, to quickly identify the underlying cause.
+Messages related to API misuse should be useful to the end user. Messages indicating bugs should be helpful to
+you-as-the-author, or whoever maintains the project after you, to quickly identify the underlying cause.
 
 Panic messages in tests are not generally needed.

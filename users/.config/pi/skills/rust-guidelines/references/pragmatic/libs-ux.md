@@ -2,16 +2,16 @@
 
 # Library UX (Pragmatic Rust Guidelines)
 
-
 ## Abstractions don't visibly nest (M-SIMPLE-ABSTRACTIONS) { #M-SIMPLE-ABSTRACTIONS }
 
 <why>low cognitive load and a good out-of-the-box UX.</why>
 
-When designing your public types and primary API surface, avoid exposing nested or complex parametrized types to your users.
+When designing your public types and primary API surface, avoid exposing nested or complex parametrized types to your
+users.
 
-While powerful, type parameters introduce a cognitive load, even more so if the involved traits are crate-specific. Type parameters
-become infectious to user code holding on to these types in their fields, often come with complex trait hierarchies on their own, and
-might cause confusing error messages.
+While powerful, type parameters introduce a cognitive load, even more so if the involved traits are crate-specific. Type
+parameters become infectious to user code holding on to these types in their fields, often come with complex trait
+hierarchies on their own, and might cause confusing error messages.
 
 From the perspective of a user authoring `Foo`, where the other structs come from your crate:
 
@@ -30,52 +30,54 @@ struct Foo {
 }
 ```
 
-_Visible_ type parameters should be avoided in _service-like_ types (i.e., types mainly instantiated once per thread / application that are often passed
-as dependencies), in particular if the nestee originates from the same crate as the service.
+_Visible_ type parameters should be avoided in _service-like_ types (i.e., types mainly instantiated once per thread /
+application that are often passed as dependencies), in particular if the nestee originates from the same crate as the
+service.
 
-Containers, smart-pointers and similar data structures obviously must expose a type parameter, e.g., `List<T>` above. Even then, care should
-be taken to limit the number and nesting of parameters.
+Containers, smart-pointers and similar data structures obviously must expose a type parameter, e.g., `List<T>` above.
+Even then, care should be taken to limit the number and nesting of parameters.
 
 To decide whether type parameter nesting should be avoided, consider these factors:
 
 - Will the type be **named** by your users?
   - Service-level types are always expected to be named (e.g., `Library<T>`),
-  - Utility types, such as the many [`std::iter`](https://doc.rust-lang.org/stable/std/iter/index.html) types like `Chain`, `Cloned`, `Cycle`, are not
-    expected to be named.
+  - Utility types, such as the many [`std::iter`](https://doc.rust-lang.org/stable/std/iter/index.html) types like
+    `Chain`, `Cloned`, `Cycle`, are not expected to be named.
 - Does the type primarily compose with non-user types?
 - Do the used type parameters have complex bounds?
 - Do the used type parameters affect inference in other types or functions?
 
 The more of these factors apply, the bigger the cognitive burden.
 
-As a rule of thumb, primary service API types should not nest _on their own volition_, and if they do, only 1 level deep. In other words, these
-APIs should not require users having to deal with an `Foo<Bar<FooBar>>`. However, if `Foo<T>` users want to bring their own `A<B<C>>` as `T` they
-should be free to do so.
+As a rule of thumb, primary service API types should not nest _on their own volition_, and if they do, only 1 level
+deep. In other words, these APIs should not require users having to deal with an `Foo<Bar<FooBar>>`. However, if
+`Foo<T>` users want to bring their own `A<B<C>>` as `T` they should be free to do so.
 
 > ### <tip></tip> Type Magic for Better UX?
 >
-> The guideline above is written with 'bread-and-butter' types in mind you might create during  _normal_ development activity. Its intention is to
-> reduce friction users encounter when working with your code.
+> The guideline above is written with 'bread-and-butter' types in mind you might create during _normal_ development
+> activity. Its intention is to reduce friction users encounter when working with your code.
 >
-> However, when designing API patterns and ecosystems at large, there might be valid reasons to introduce intricate type magic to overall _lower_
-> the cognitive friction involved, [Bevy's ECS](https://docs.rs/bevy_ecs/latest/bevy_ecs/) or
+> However, when designing API patterns and ecosystems at large, there might be valid reasons to introduce intricate type
+> magic to overall _lower_ the cognitive friction involved, [Bevy's ECS](https://docs.rs/bevy_ecs/latest/bevy_ecs/) or
 > [Axum's request handlers](https://docs.rs/axum/latest/axum/handler/trait.Handler.html) come to mind.
 >
-> The threshold where this pays off is high though. If there is any doubt about the utility of your creative use of generics, your users might be
-> better off without them.
-
+> The threshold where this pays off is high though. If there is any doubt about the utility of your creative use of
+> generics, your users might be better off without them.
 
 ## Avoid smart pointers and wrappers in APIs (M-AVOID-WRAPPERS) { #M-AVOID-WRAPPERS }
 
 <why>low cognitive load and ergonomic APIs.</why>
 
-As a specialization of [M-ABSTRACTIONS-DONT-NEST], generic wrappers and smart pointers like
-`Rc<T>`, `Arc<T>`, `Box<T>`, or `RefCell<T>` should be avoided in public APIs.
+As a specialization of [M-ABSTRACTIONS-DONT-NEST], generic wrappers and smart pointers like `Rc<T>`, `Arc<T>`, `Box<T>`,
+or `RefCell<T>` should be avoided in public APIs.
 
 From a user perspective these are mostly implementation details, and introduce infectious complexity that users have to
-resolve. In fact, these might even be impossible to resolve once multiple crates disagree about the required type of wrapper.
+resolve. In fact, these might even be impossible to resolve once multiple crates disagree about the required type of
+wrapper.
 
-If wrappers are needed internally, they should be hidden behind a clean API that uses simple types like `&T`, `&mut T`, or `T` directly. Compare:
+If wrappers are needed internally, they should be hidden behind a clean API that uses simple types like `&T`, `&mut T`,
+or `T` directly. Compare:
 
 ```rust,ignore
 // Good: simple API
@@ -95,15 +97,15 @@ Smart pointers in APIs are acceptable when:
 
 [M-ABSTRACTIONS-DONT-NEST]: ./#M-ABSTRACTIONS-DONT-NEST
 
-
 ## Prefer types over generics, generics over dyn traits (M-DI-HIERARCHY) { #M-DI-HIERARCHY }
 
 <why>composable patterns and freedom from design lock-in.</why>
 
 When asking for async dependencies, prefer concrete types over generics, and generics over `dyn Trait`.
 
-It is easy to accidentally deviate from this pattern when porting code from languages like C# that heavily rely on interfaces.
-Consider you are porting a service called `Database` from C# to Rust and, inspired by the original `IDatabase` interface, you naively translate it into:
+It is easy to accidentally deviate from this pattern when porting code from languages like C# that heavily rely on
+interfaces. Consider you are porting a service called `Database` from C# to Rust and, inspired by the original
+`IDatabase` interface, you naively translate it into:
 
 ```rust,ignore
 trait Database {
@@ -118,20 +120,21 @@ impl Database for MyDatabase { ... }
 async fn start_service(b: Rc<dyn Database>) { ... }
 ```
 
-Apart from not feeling idiomatic, this approach precludes other Rust constructs that conflict with object safety,
-can cause issues with asynchronous code, and exposes wrappers (compare [M-AVOID-WRAPPERS]).
+Apart from not feeling idiomatic, this approach precludes other Rust constructs that conflict with object safety, can
+cause issues with asynchronous code, and exposes wrappers (compare [M-AVOID-WRAPPERS]).
 
 Instead, when more than one implementation is needed, this _design escalation ladder_ should be followed:
 
-If the other implementation is only concerned with providing a _sans-io_ implementation for testing, implement your type as an
-enum, following [M-MOCKABLE-SYSCALLS] instead.
+If the other implementation is only concerned with providing a _sans-io_ implementation for testing, implement your type
+as an enum, following [M-MOCKABLE-SYSCALLS] instead.
 
-If users are expected to provide custom implementations, you should introduce one or more traits, and implement them for your own types
-_on top_ of your inherent functions. Each trait should be relatively narrow, e.g., `StoreObject`, `LoadObject`. If eventually a single
-trait is needed it should be made a subtrait, e.g., `trait DataAccess: StoreObject + LoadObject {}`.
+If users are expected to provide custom implementations, you should introduce one or more traits, and implement them for
+your own types _on top_ of your inherent functions. Each trait should be relatively narrow, e.g., `StoreObject`,
+`LoadObject`. If eventually a single trait is needed it should be made a subtrait, e.g.,
+`trait DataAccess: StoreObject + LoadObject {}`.
 
-Code working with these traits should ideally accept them as generic type parameters as long as their use does not contribute to significant nesting
-(compare [M-ABSTRACTIONS-DONT-NEST]).
+Code working with these traits should ideally accept them as generic type parameters as long as their use does not
+contribute to significant nesting (compare [M-ABSTRACTIONS-DONT-NEST]).
 
 ```rust,ignore
 // Good, generic does not have infectious impact, uses only most specific trait
@@ -143,7 +146,8 @@ struct MyService<T: DataAccess> {
 }
 ```
 
-Once generics become a nesting problem, `dyn Trait` can be considered. Even in this case, visible wrapping should be avoided, and custom wrappers should be preferred.
+Once generics become a nesting problem, `dyn Trait` can be considered. Even in this case, visible wrapping should be
+avoided, and custom wrappers should be preferred.
 
 ```rust
 # use std::sync::Arc;
@@ -182,16 +186,17 @@ async fn read_database(x: &DataAccess) { ... }
 [M-MOCKABLE-SYSCALLS]: ../resilience/#M-MOCKABLE-SYSCALLS
 [M-ABSTRACTIONS-DONT-NEST]: ./#M-ABSTRACTIONS-DONT-NEST
 
-
 ## Errors are canonical structs (M-ERRORS-CANONICAL-STRUCTS) { #M-ERRORS-CANONICAL-STRUCTS }
 
 <why>harmonized error types and consistent error handling.</why>
 
-Errors should be a situation-specific `struct` that contain a [`Backtrace`](https://doc.rust-lang.org/stable/std/backtrace/struct.Backtrace.html),
-a possible upstream error cause, and helper methods.
+Errors should be a situation-specific `struct` that contain a
+[`Backtrace`](https://doc.rust-lang.org/stable/std/backtrace/struct.Backtrace.html), a possible upstream error cause,
+and helper methods.
 
 Simple crates usually expose a single error type `Error`, complex crates may expose multiple types, for example
-`AccessError` and `ConfigurationError`. Error types should provide helper methods for additional information that allows callers to handle the error.
+`AccessError` and `ConfigurationError`. Error types should provide helper methods for additional information that allows
+callers to handle the error.
 
 A simple error might look like so:
 
@@ -225,8 +230,9 @@ impl ConfigurationError {
 }
 ```
 
-If your API does mixed operations, or depends on various upstream libraries, store an `ErrorKind`.
-Error kinds, and more generally enum-based errors, should not be used to avoid creating separate public error types when there is otherwise no error overlap:
+If your API does mixed operations, or depends on various upstream libraries, store an `ErrorKind`. Error kinds, and more
+generally enum-based errors, should not be used to avoid creating separate public error types when there is otherwise no
+error overlap:
 
 ```rust, ignore
 // Prefer this
@@ -243,9 +249,9 @@ fn parse_json() -> Result<(), ParseError> {}
 fn parse_toml() -> Result<(), ParseError> {}
 ```
 
-If you do use an inner `ErrorKind`, that enum should not be exposed directly for future-proofing reasons,
-as otherwise you would expose your callers to _all_ possible failure modes, even the ones you consider internal
-and unhandleable. Instead, expose various `is_xxx()` methods as shown below:
+If you do use an inner `ErrorKind`, that enum should not be exposed directly for future-proofing reasons, as otherwise
+you would expose your callers to _all_ possible failure modes, even the ones you consider internal and unhandleable.
+Instead, expose various `is_xxx()` methods as shown below:
 
 ```rust
 # use std::backtrace::Backtrace;
@@ -269,8 +275,8 @@ impl HttpError {
 }
 ```
 
-Most upstream errors don't provide a backtrace. You should capture one when creating an `Error` instance, either via one of
-your `Error::new()` flavors, or when implementing `From<UpstreamError> for Error {}`.
+Most upstream errors don't provide a backtrace. You should capture one when creating an `Error` instance, either via one
+of your `Error::new()` flavors, or when implementing `From<UpstreamError> for Error {}`.
 
 Error structs must properly implement `Display` that renders as follows:
 
@@ -291,24 +297,29 @@ Errors must also implement `std::error::Error`:
 impl std::error::Error for MyError { }
 ```
 
-Lastly, if you happen to emit lots of errors from your crate, consider creating a private `bail!()` helper macro to simplify error instantiation.
+Lastly, if you happen to emit lots of errors from your crate, consider creating a private `bail!()` helper macro to
+simplify error instantiation.
 
 > ### <tip></tip> When You Get Backtraces
 >
-> Backtraces are an invaluable debug tool in complex or async code, since  errors might _travel_ far through a callstack before being surfaced.
+> Backtraces are an invaluable debug tool in complex or async code, since errors might _travel_ far through a callstack
+> before being surfaced.
 >
-> That said, they are a _development_ tool, not a _runtime_ diagnostic, and by default `Backtrace::capture()` will **not** capture
-> backtraces, as they have a large overhead, e.g., 4μs per capture on the author's PC.
+> That said, they are a _development_ tool, not a _runtime_ diagnostic, and by default `Backtrace::capture()` will
+> **not** capture backtraces, as they have a large overhead, e.g., 4μs per capture on the author's PC.
 >
-> Instead, Rust evaluates a [set of environment variables](https://doc.rust-lang.org/stable/std/backtrace/index.html#environment-variables), such as
-> `RUST_BACKTRACE`, and only walks the call frame when explicitly asked. Otherwise it captures an empty trace, at the cost of only a few CPU instructions.
-
+> Instead, Rust evaluates a
+> [set of environment variables](https://doc.rust-lang.org/stable/std/backtrace/index.html#environment-variables), such
+> as `RUST_BACKTRACE`, and only walks the call frame when explicitly asked. Otherwise it captures an empty trace, at the
+> cost of only a few CPU instructions.
 
 ## Canonical error conversion uses `From`, not `map_err` (M-FROM-ERROR) { #M-FROM-ERROR }
 
 <why>idiomatic error handling.</why>
 
-Where an `Error` type is owned, it should `impl From<Other> for Error {}` instead of handling the conversion throughout the code via `.map_error()`. Calling `.map_error()` is only appropriate when dealing with foreign error types, or if contextual information needs to be preserved.
+Where an `Error` type is owned, it should `impl From<Other> for Error {}` instead of handling the conversion throughout
+the code via `.map_error()`. Calling `.map_error()` is only appropriate when dealing with foreign error types, or if
+contextual information needs to be preserved.
 
 ```rust,ignore
 // Bad, repeats the same conversion at every call site and obscures the happy path.
@@ -332,13 +343,12 @@ fn load() -> Result<Config, MyError> {
 }
 ```
 
-
 ## Complex type construction has builders (M-INIT-BUILDER) { #M-INIT-BUILDER }
 
 <why>future-proof type construction in complex scenarios.</why>
 
-Types that could support 4 or more arbitrary initialization permutations should provide builders. In other words, types with up to
-2 optional initialization parameters can be constructed via inherent methods:
+Types that could support 4 or more arbitrary initialization permutations should provide builders. In other words, types
+with up to 2 optional initialization parameters can be constructed via inherent methods:
 
 ```rust
 # struct A;
@@ -376,18 +386,20 @@ impl FooBuilder {
 
 ```
 
-The proper name for a builder that builds `Foo` is `FooBuilder`. Its methods must be chainable, with the final method called
-`.build()`. The buildable struct must have a shortcut `Foo::builder()`, while the builder itself should _not_ have a public
-`FooBuilder::new()`. Builder methods that set a value `x` are called `x()`, not `set_x()` or similar.
+The proper name for a builder that builds `Foo` is `FooBuilder`. Its methods must be chainable, with the final method
+called `.build()`. The buildable struct must have a shortcut `Foo::builder()`, while the builder itself should _not_
+have a public `FooBuilder::new()`. Builder methods that set a value `x` are called `x()`, not `set_x()` or similar.
 
 ### Builders and Required Parameters
 
-Required parameters should be passed when creating the builder, not as setter methods. For builders with multiple required
-parameters, encapsulate them into a parameters struct and use the `deps: impl Into<Deps>` pattern to provide flexibility:
+Required parameters should be passed when creating the builder, not as setter methods. For builders with multiple
+required parameters, encapsulate them into a parameters struct and use the `deps: impl Into<Deps>` pattern to provide
+flexibility:
 
-> **Note:** A dedicated deps struct is not required if the builder has no required parameters or only a single simple parameter. However,
-> for backward compatibility and API evolution, it's preferable to use a dedicated struct for deps even in simple cases, as it makes it
-> easier to add new required parameters in the future without breaking existing code.
+> **Note:** A dedicated deps struct is not required if the builder has no required parameters or only a single simple
+> parameter. However, for backward compatibility and API evolution, it's preferable to use a dedicated struct for deps
+> even in simple cases, as it makes it easier to add new required parameters in the future without breaking existing
+> code.
 
 ```rust, ignore
 #[derive(Debug, Clone)]
@@ -421,11 +433,13 @@ pub struct FooDeps {
 }
 ```
 
-This pattern enables "dependency injection", see [these docs](https://docs.rs/fundle/latest/fundle/attr.deps.html) for more details.
+This pattern enables "dependency injection", see [these docs](https://docs.rs/fundle/latest/fundle/attr.deps.html) for
+more details.
 
 ### Runtime-Specific Builders
 
-For types that are runtime-specific or require runtime-specific configuration, provide dedicated builder creation methods that accept the appropriate runtime parameters:
+For types that are runtime-specific or require runtime-specific configuration, provide dedicated builder creation
+methods that accept the appropriate runtime parameters:
 
 ```rust, ignore
 #[cfg(feature="smol")]
@@ -450,14 +464,14 @@ impl Foo {
 }
 ```
 
-This approach ensures type safety at compile time and makes the runtime dependency explicit in the API surface. The resulting
-builder methods follow the pattern `builder_{runtime}(deps)` where `{runtime}` indicates the specific runtime or execution environment.
+This approach ensures type safety at compile time and makes the runtime dependency explicit in the API surface. The
+resulting builder methods follow the pattern `builder_{runtime}(deps)` where `{runtime}` indicates the specific runtime
+or execution environment.
 
 ### Further Reading
 
 - [Builder pattern in Rust: self vs. &mut self, and method vs. associated function](https://users.rust-lang.org/t/builder-pattern-in-rust-self-vs-mut-self-and-method-vs-associated-function/72892)
 - [fundle](https://docs.rs/fundle)
-
 
 ## Complex type initialization hierarchies are cascaded (M-INIT-CASCADED) { #M-INIT-CASCADED }
 
@@ -493,14 +507,15 @@ impl Account {
 
 [C-NEWTYPE]: https://rust-lang.github.io/api-guidelines/type-safety.html#c-newtype
 
-
 ## Services are Clone (M-SERVICES-CLONE) { #M-SERVICES-CLONE }
 
 <why>composable sharing of common services.</why>
 
-Heavyweight _service_ types and 'thread singletons' should implement shared-ownership `Clone` semantics, including any type you expect to be used from your `Application::init`.
+Heavyweight _service_ types and 'thread singletons' should implement shared-ownership `Clone` semantics, including any
+type you expect to be used from your `Application::init`.
 
-Per thread, users should essentially be able to create a single resource handler instance, and have it reused by other handlers on the same thread:
+Per thread, users should essentially be able to create a single resource handler instance, and have it reused by other
+handlers on the same thread:
 
 ```rust,ignore
 impl ThreadLocal for MyThreadState {
@@ -518,7 +533,8 @@ impl ThreadLocal for MyThreadState {
 }
 ```
 
-Services then simply clone their dependency and store a new _handle_, as if `ServiceCommon` were a shared-ownership smart pointer:
+Services then simply clone their dependency and store a new _handle_, as if `ServiceCommon` were a shared-ownership
+smart pointer:
 
 ```rust,ignore
 impl ServiceA {
@@ -530,7 +546,8 @@ impl ServiceA {
 }
 ```
 
-Under the hood this `Clone` should **not** create a fat copy of the entire service. Instead, it should follow the `Arc<Inner>` pattern:
+Under the hood this `Clone` should **not** create a fat copy of the entire service. Instead, it should follow the
+`Arc<Inner>` pattern:
 
 ```rust, ignore
 // Actual service containing core logic and data.
@@ -552,12 +569,12 @@ impl ServiceCommon {
 }
 ```
 
-
 ## Essential functionality should be inherent (M-ESSENTIAL-FN-INHERENT) { #M-ESSENTIAL-FN-INHERENT }
 
 <why>easily discoverable essential functionality.</why>
 
-Types should implement core functionality inherently. Trait implementations should forward to inherent functions, and not replace them. Instead of this
+Types should implement core functionality inherently. Trait implementations should forward to inherent functions, and
+not replace them. Instead of this
 
 ```rust
 # trait Download {
@@ -597,21 +614,27 @@ impl Download for HttpClient {
 }
 ```
 
-
 ## Modules are balanced in size and scope (M-BALANCED-MODULES) { #M-BALANCED-MODULES }
 
 <why>discoverable functionality and clear API usage.</why>
 
-Your module design should approximately follow established UX practices of menu design: A _reasonable_ number of your most important items should be placed in the crate root, and a comprehensible grouping of the remaining functionality into subordinate modules.
+Your module design should approximately follow established UX practices of menu design: A _reasonable_ number of your
+most important items should be placed in the crate root, and a comprehensible grouping of the remaining functionality
+into subordinate modules.
 
-Two violations of that rule are encountered most frequently: flat module roots containing dozens of items without clear ordering, or the excessive use of submodules without items in the crate root. While there are crates where this makes sense (e.g., automatically generated `-sys` crates defining 100s of C items, or umbrella crates like `std` and `tokio`), the majority of library crates are not among them.
+Two violations of that rule are encountered most frequently: flat module roots containing dozens of items without clear
+ordering, or the excessive use of submodules without items in the crate root. While there are crates where this makes
+sense (e.g., automatically generated `-sys` crates defining 100s of C items, or umbrella crates like `std` and `tokio`),
+the majority of library crates are not among them.
 
 When designing your module layout, consider these factors:
 
-- Essential items users must find in order to use a crate should go into its root. For example, a `foo_client` crate should probably have its main `Client` struct inside the root.
-- Other items should be grouped semantically by use case. Modules named `traits` and `errors` don't help anyone, but `account`, `network` and `status` do.
-- Also take into account that modules are the perfect place for module-level documentation that further explains the respective subsystem.
-
+- Essential items users must find in order to use a crate should go into its root. For example, a `foo_client` crate
+  should probably have its main `Client` struct inside the root.
+- Other items should be grouped semantically by use case. Modules named `traits` and `errors` don't help anyone, but
+  `account`, `network` and `status` do.
+- Also take into account that modules are the perfect place for module-level documentation that further explains the
+  respective subsystem.
 
 ## Don't define preludes (M-NO-PRELUDE) { #M-NO-PRELUDE }
 
@@ -619,7 +642,9 @@ When designing your module layout, consider these factors:
 
 Crates must not define a `prelude` or any namespace intended to be imported as `use foo::*`.
 
-While the Rust Standard Library successfully uses [preludes](https://doc.rust-lang.org/std/prelude/index.html) to define edition items, preludes in crates cause more harm than good. Given today's IDE support they are not needed, and once multiple preludes are used from different crates there is potential for conflicts:
+While the Rust Standard Library successfully uses [preludes](https://doc.rust-lang.org/std/prelude/index.html) to define
+edition items, preludes in crates cause more harm than good. Given today's IDE support they are not needed, and once
+multiple preludes are used from different crates there is potential for conflicts:
 
 ```rust,ignore
 use foo::prelude::*;
@@ -631,20 +656,22 @@ _ = Client::new();
 // error[E0659]: `Client` is ambiguous
 //   --> src/lib.rs:17:13
 //    |
-// 17 |     _ = Client; 
+// 17 |     _ = Client;
 //    |         ^^^^^^ ambiguous name
 //    |
 //    = note: ambiguous because of multiple glob imports of a name in the same module
 ```
 
-Preludes in particular do not resolve bad module design. If it looks like a prelude would make the crate easier to use or understand, this is almost always an indication that the existing module system needs restructuring, see [M-BALANCED-MODULES](./#M-BALANCED-MODULES).
-
+Preludes in particular do not resolve bad module design. If it looks like a prelude would make the crate easier to use
+or understand, this is almost always an indication that the existing module system needs restructuring, see
+[M-BALANCED-MODULES](./#M-BALANCED-MODULES).
 
 ## Parameter ordering is consistent (M-PARAMETER-CONSISTENCY) { #M-PARAMETER-CONSISTENCY }
 
 <why>low development friction.</why>
 
-When the same conceptual parameters appear in multiple functions (within a crate or across crates in the same ecosystem), they should appear in the same order everywhere:
+When the same conceptual parameters appear in multiple functions (within a crate or across crates in the same
+ecosystem), they should appear in the same order everywhere:
 
 - important or call-specific parameters should generally go first,
 - ubiquitous parameters rather go last (e.g., `&logger`),
@@ -664,14 +691,14 @@ fn delete_user(tenant_id: TenantId, user_id: UserId, logger: &Logger) -> Result<
 fn rename_user(tenant_id: TenantId, user_id: UserId, new_name: &str, logger: &Logger) -> Result<()> { ... }
 ```
 
-
 ## Collections implement the appropriate iter traits (M-COLLECTION-TRAITS) { #M-COLLECTION-TRAITS }
 
 <why>composable collections.</why>
 
 Custom collections should implement the iterator-facing traits the standard library offers.
 
-Whenever you define a new collection type `Collection<T>` for consumption by third parties, the following traits and types should also be implemented, [see here](https://cheats.rs/#iterators) for more details:
+Whenever you define a new collection type `Collection<T>` for consumption by third parties, the following traits and
+types should also be implemented, [see here](https://cheats.rs/#iterators) for more details:
 
 - the structs `IntoIter<T>`, `Iter<T>` and `IterMut<T>`,
 - an `impl Iterator` for all of them,
@@ -683,14 +710,15 @@ Whenever you define a new collection type `Collection<T>` for consumption by thi
 
 In addition, make sure you implement `size_hint()` on all iterators and do so truthfully.
 
-
 ## Functions are `async` over returning a Future (M-ASYNC-FN) { #M-ASYNC-FN }
 
 <why>simpler code and easier-to-understand APIs.</why>
 
 Functions should be declared `async fn foo()` over `fn foo() -> impl Future` when both are viable.
 
-Functions marked `async` are more idiomatic and easier to read. An explicit `Future`-returning signature should only be used when required, for example inside traits or for _hot 'n heavy_ async functions, compare [M-ASYNC-STACK-SIZE](../../performance/#M-ASYNC-STACK-SIZE).
+Functions marked `async` are more idiomatic and easier to read. An explicit `Future`-returning signature should only be
+used when required, for example inside traits or for _hot 'n heavy_ async functions, compare
+[M-ASYNC-STACK-SIZE](../../performance/#M-ASYNC-STACK-SIZE).
 
 ```rust,ignore
 impl Foo {

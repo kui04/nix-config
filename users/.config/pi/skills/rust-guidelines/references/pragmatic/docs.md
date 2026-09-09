@@ -2,12 +2,12 @@
 
 # Documentation (Pragmatic Rust Guidelines)
 
-
 ## First sentence is one line; approx. 15 words (M-FIRST-DOC-SENTENCE) { #M-FIRST-DOC-SENTENCE }
 
 <why>easily skimmable API docs.</why>
 
-When you document your item, the first sentence becomes the "summary sentence" that is extracted and shown in the module summary:
+When you document your item, the first sentence becomes the "summary sentence" that is extracted and shown in the module
+summary:
 
 ```rust
 /// This is the summary sentence, shown in the module summary.
@@ -17,8 +17,8 @@ When you document your item, the first sentence becomes the "summary sentence" t
 fn some_item() { }
 ```
 
-Since Rust API documentation is rendered with a fixed max width, there is a naturally preferred sentence length you should not
-exceed to keep things tidy on most screens.
+Since Rust API documentation is rendered with a fixed max width, there is a naturally preferred sentence length you
+should not exceed to keep things tidy on most screens.
 
 If you keep things in a line, your docs will become easily skimmable. Compare, for example, the standard library:
 
@@ -30,12 +30,12 @@ Otherwise, you might end up with _widows_ and a generally unpleasant reading flo
 
 As a rule of thumb, the first sentence should not exceed **15 words**.
 
-
 ## Has comprehensive module documentation (M-MODULE-DOCS) { #M-MODULE-DOCS }
 
 <why>easy API docs navigation.</why>
 
-Any public library module must have `//!` module documentation, and the first sentence must follow [M-DOC-FIRST-SENTENCE].
+Any public library module must have `//!` module documentation, and the first sentence must follow
+[M-DOC-FIRST-SENTENCE].
 
 ```rust,edition2021,ignore
 pub mod ffi {
@@ -45,33 +45,34 @@ pub mod ffi {
 }
 ```
 
-The rest of the module documentation should be comprehensive, i.e., cover the most relevant technical aspects of the contained items, including
+The rest of the module documentation should be comprehensive, i.e., cover the most relevant technical aspects of the
+contained items, including
 
 - what the module contains
 - when it should be used, possibly when not
 - examples
-- subsystem specifications (e.g., `std::fmt` [also describes its formatting language](https://doc.rust-lang.org/stable/std/fmt/index.html#formatting-parameters))
+- subsystem specifications (e.g., `std::fmt`
+  [also describes its formatting language](https://doc.rust-lang.org/stable/std/fmt/index.html#formatting-parameters))
 - observable side effects, including what guarantees are made about these, if any
 - relevant implementation details, e.g., the used system APIs
 
- Great examples include:
+Great examples include:
 
 - [`std::fmt`](https://doc.rust-lang.org/stable/std/fmt/index.html)
 - [`std::pin`](https://doc.rust-lang.org/stable/std/pin/index.html)
 - [`std::option`](https://doc.rust-lang.org/stable/std/option/index.html)
 
-This does not mean every module should contain all of these items. But if there is something to say about the interaction of the contained types,
-their module documentation is the right place.
+This does not mean every module should contain all of these items. But if there is something to say about the
+interaction of the contained types, their module documentation is the right place.
 
 [M-DOC-FIRST-SENTENCE]: ./#M-DOC-FIRST-SENTENCE
-
 
 ## Documentation has canonical sections (M-CANONICAL-DOCS) { #M-CANONICAL-DOCS }
 
 <why>established Rust documentation practices.</why>
 
-Public library items must contain the canonical doc sections. The summary sentence must always be present. Extended documentation and examples
-are strongly encouraged. The other sections must be present when applicable.
+Public library items must contain the canonical doc sections. The summary sentence must always be present. Extended
+documentation and examples are strongly encouraged. The other sections must be present when applicable.
 
 ```rust
 /// Summary sentence < 15 words.
@@ -96,7 +97,8 @@ are strongly encouraged. The other sections must be present when applicable.
 pub fn foo() {}
 ```
 
-In contrast to other languages, you should not create a table of parameters. Instead parameter use is explained in plain text. In other words, do not
+In contrast to other languages, you should not create a table of parameters. Instead parameter use is explained in plain
+text. In other words, do not
 
 ```rust,ignore
 /// Copies a file.
@@ -116,15 +118,15 @@ fn copy(src: File, dst: File) {}
 
 ### Related Reading
 
-- Function docs include error, panic, and safety considerations ([C-FAILURE](https://rust-lang.github.io/api-guidelines/documentation.html#c-failure))
-
+- Function docs include error, panic, and safety considerations
+  ([C-FAILURE](https://rust-lang.github.io/api-guidelines/documentation.html#c-failure))
 
 ## Mark `pub use` items with `#[doc(inline)]` (M-DOC-INLINE) { #M-DOC-INLINE }
 
 <why>re-exported items that fit in with their siblings.</why>
 
-When publicly re-exporting crate items via `pub use foo::Foo` or `pub use foo::*`, they show up in an opaque re-export block. In most cases, this is not
-helpful to the reader:
+When publicly re-exporting crate items via `pub use foo::Foo` or `pub use foo::*`, they show up in an opaque re-export
+block. In most cases, this is not helpful to the reader:
 
 ![TEXT](M-DOC-INLINE_BAD.png)
 
@@ -143,10 +145,12 @@ pub use foo::Foo;
 
 ![TEXT](M-DOC-INLINE_GOOD.png)
 
-This does not apply to `std` or 3rd party types; these should always be re-exported without inlining to make it clear they are external.
+This does not apply to `std` or 3rd party types; these should always be re-exported without inlining to make it clear
+they are external.
 
 > ### <alert></alert> Still avoid glob exports
 >
-> The `#[doc(inline)]` trick above does not change [M-NO-GLOB-REEXPORTS]; you generally should not re-export items via wildcards.
+> The `#[doc(inline)]` trick above does not change [M-NO-GLOB-REEXPORTS]; you generally should not re-export items via
+> wildcards.
 
 [M-NO-GLOB-REEXPORTS]: ../libs/resilience/#M-NO-GLOB-REEXPORTS

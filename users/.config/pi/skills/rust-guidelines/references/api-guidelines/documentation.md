@@ -2,31 +2,29 @@
 
 # Documentation
 
-
 <a id="c-crate-doc"></a>
+
 ## Crate level docs are thorough and include examples (C-CRATE-DOC)
 
 See [RFC 1687].
 
 [RFC 1687]: https://github.com/rust-lang/rfcs/pull/1687
 
-
 <a id="c-example"></a>
+
 ## All items have a rustdoc example (C-EXAMPLE)
 
-Every public module, trait, struct, enum, function, method, macro, and type
-definition should have an example that exercises the functionality.
+Every public module, trait, struct, enum, function, method, macro, and type definition should have an example that
+exercises the functionality.
 
 This guideline should be applied within reason.
 
-A link to an applicable example on another item may be sufficient. For example
-if exactly one function uses a particular type, it may be appropriate to write a
-single example on either the function or the type and link to it from the other.
+A link to an applicable example on another item may be sufficient. For example if exactly one function uses a particular
+type, it may be appropriate to write a single example on either the function or the type and link to it from the other.
 
-The purpose of an example is not always to show *how to use* the item. Readers
-can be expected to understand how to invoke functions, match on enums, and other
-fundamental tasks. Rather, an example is often intended to show *why someone
-would want to use* the item.
+The purpose of an example is not always to show _how to use_ the item. Readers can be expected to understand how to
+invoke functions, match on enums, and other fundamental tasks. Rather, an example is often intended to show _why someone
+would want to use_ the item.
 
 ```rust
 // This would be a poor example of using clone(). It mechanically shows *how* to
@@ -38,18 +36,17 @@ fn main() {
 }
 ```
 
-
 <a id="c-question-mark"></a>
+
 ## Examples use `?`, not `try!`, not `unwrap` (C-QUESTION-MARK)
 
-Like it or not, example code is often copied verbatim by users. Unwrapping an
-error should be a conscious decision that the user needs to make.
+Like it or not, example code is often copied verbatim by users. Unwrapping an error should be a conscious decision that
+the user needs to make.
 
-A common way of structuring fallible example code is the following. The lines
-beginning with `#` are compiled by `cargo test` when building the example but
-will not appear in user-visible rustdoc.
+A common way of structuring fallible example code is the following. The lines beginning with `#` are compiled by
+`cargo test` when building the example but will not appear in user-visible rustdoc.
 
-```
+````
 /// ```rust
 /// # use std::error::Error;
 /// #
@@ -61,18 +58,17 @@ will not appear in user-visible rustdoc.
 /// #     Ok(())
 /// # }
 /// ```
-```
-
+````
 
 <a id="c-failure"></a>
+
 ## Function docs include error, panic, and safety considerations (C-FAILURE)
 
-Error conditions should be documented in an "Errors" section. This applies to
-trait methods as well -- trait methods for which the implementation is allowed
-or expected to return an error should be documented with an "Errors" section.
+Error conditions should be documented in an "Errors" section. This applies to trait methods as well -- trait methods for
+which the implementation is allowed or expected to return an error should be documented with an "Errors" section.
 
-For example in the standard library, Some implementations of the
-[`std::io::Read::read`] trait method may return an error.
+For example in the standard library, Some implementations of the [`std::io::Read::read`] trait method may return an
+error.
 
 [`std::io::Read::read`]: https://doc.rust-lang.org/std/io/trait.Read.html#tymethod.read
 
@@ -89,9 +85,8 @@ For example in the standard library, Some implementations of the
 /// guaranteed that no bytes were read.
 ```
 
-Panic conditions should be documented in a "Panics" section. This applies to
-trait methods as well -- traits methods for which the implementation is allowed
-or expected to panic should be documented with a "Panics" section.
+Panic conditions should be documented in a "Panics" section. This applies to trait methods as well -- traits methods for
+which the implementation is allowed or expected to panic should be documented with a "Panics" section.
 
 In the standard library the [`Vec::insert`] method may panic.
 
@@ -106,10 +101,9 @@ In the standard library the [`Vec::insert`] method may panic.
 /// Panics if `index` is out of bounds.
 ```
 
-It is not necessary to document all conceivable panic cases, especially if the
-panic occurs in logic provided by the caller. For example documenting the
-`Display` panic in the following code seems excessive. But when in doubt, err on
-the side of documenting more panic cases.
+It is not necessary to document all conceivable panic cases, especially if the panic occurs in logic provided by the
+caller. For example documenting the `Display` panic in the following code seems excessive. But when in doubt, err on the
+side of documenting more panic cases.
 
 ```rust
 /// # Panics
@@ -120,9 +114,8 @@ pub fn print<T: Display>(t: T) {
 }
 ```
 
-Unsafe functions should be documented with a "Safety" section that explains all
-invariants that the caller is responsible for upholding to use the function
-correctly.
+Unsafe functions should be documented with a "Safety" section that explains all invariants that the caller is
+responsible for upholding to use the function correctly.
 
 The unsafe [`std::ptr::read`] requires the following of the caller.
 
@@ -144,15 +137,13 @@ The unsafe [`std::ptr::read`] requires the following of the caller.
 /// The pointer must be aligned; use `read_unaligned` if that is not the case.
 ```
 
-
 <a id="c-link"></a>
+
 ## Prose contains hyperlinks to relevant things (C-LINK)
 
-Regular links can be added inline with the usual markdown syntax of
-`[text](url)`. Links to other types can be added by marking them with
-``[`text`]``, then adding the link target in a new line at the end of
-the docstring with ``[`text`]: <target>``, where `<target>` is
-described below.
+Regular links can be added inline with the usual markdown syntax of `[text](url)`. Links to other types can be added by
+marking them with ``[`text`]``, then adding the link target in a new line at the end of the docstring with
+``[`text`]: <target>``, where `<target>` is described below.
 
 Link targets to methods within the same type usually look like this:
 
@@ -173,17 +164,16 @@ Link targets may also point to a parent or child module:
 [`DeserializeOwned`]: de/trait.DeserializeOwned.html
 ```
 
-This guideline is officially recommended by RFC 1574 under the heading ["Link
-all the things"].
+This guideline is officially recommended by RFC 1574 under the heading ["Link all the things"].
 
-["Link all the things"]: https://github.com/rust-lang/rfcs/blob/master/text/1574-more-api-documentation-conventions.md#link-all-the-things
-
+["Link all the things"]:
+  https://github.com/rust-lang/rfcs/blob/master/text/1574-more-api-documentation-conventions.md#link-all-the-things
 
 <a id="c-metadata"></a>
+
 ## Cargo.toml includes all common metadata (C-METADATA)
 
-The `[package]` section of `Cargo.toml` should include the following
-values:
+The `[package]` section of `Cargo.toml` should include the following values:
 
 - `authors`
 - `description`
@@ -197,32 +187,28 @@ In addition, there are two optional metadata fields:
 - `documentation`
 - `homepage`
 
-By default, *crates.io* links to documentation for the crate on [*docs.rs*]. The
-`documentation` metadata only needs to be set if the documentation is hosted
-somewhere other than *docs.rs*, for example because the crate links against a
-shared library that is not available in the build environment of *docs.rs*.
+By default, _crates.io_ links to documentation for the crate on [*docs.rs*]. The `documentation` metadata only needs to
+be set if the documentation is hosted somewhere other than _docs.rs_, for example because the crate links against a
+shared library that is not available in the build environment of _docs.rs_.
 
 [*docs.rs*]: https://docs.rs
 
-The `homepage` metadata should only be set if there is a unique website for the
-crate other than the source repository or API documentation. Do not make
-`homepage` redundant with either the `documentation` or `repository` values. For
+The `homepage` metadata should only be set if there is a unique website for the crate other than the source repository
+or API documentation. Do not make `homepage` redundant with either the `documentation` or `repository` values. For
 example, serde sets `homepage` to *https://serde.rs*, a dedicated website.
 
 <a id="c-relnotes"></a>
+
 ## Release notes document all significant changes (C-RELNOTES)
 
-Users of the crate can read the release notes to find a summary of what
-changed in each published release of the crate. A link to the release notes,
-or the notes themselves, should be included in the crate-level documentation
-and/or the repository linked in Cargo.toml.
+Users of the crate can read the release notes to find a summary of what changed in each published release of the crate.
+A link to the release notes, or the notes themselves, should be included in the crate-level documentation and/or the
+repository linked in Cargo.toml.
 
-Breaking changes (as defined in [RFC 1105]) should be clearly identified in the
-release notes.
+Breaking changes (as defined in [RFC 1105]) should be clearly identified in the release notes.
 
-If using Git to track the source of a crate, every release published to
-*crates.io* should have a corresponding tag identifying the commit that was
-published. A similar process should be used for non-Git VCS tools as well.
+If using Git to track the source of a crate, every release published to _crates.io_ should have a corresponding tag
+identifying the commit that was published. A similar process should be used for non-Git VCS tools as well.
 
 ```bash
 # Tag the current commit
@@ -230,8 +216,7 @@ GIT_COMMITTER_DATE=$(git log -n1 --pretty=%aD) git tag -a -m "Release 0.3.0" 0.3
 git push --tags
 ```
 
-Annotated tags are preferred because some Git commands ignore unannotated tags
-if any annotated tags exist.
+Annotated tags are preferred because some Git commands ignore unannotated tags if any annotated tags exist.
 
 [RFC 1105]: https://github.com/rust-lang/rfcs/blob/master/text/1105-api-evolution.md
 
@@ -242,19 +227,17 @@ if any annotated tags exist.
 - [Serde 0.9.0 release notes](https://github.com/serde-rs/serde/releases/tag/v0.9.0)
 - [Diesel change log](https://github.com/diesel-rs/diesel/blob/master/CHANGELOG.md)
 
-
 <a id="c-hidden"></a>
+
 ## Rustdoc does not show unhelpful implementation details (C-HIDDEN)
 
-Rustdoc is supposed to include everything users need to use the crate fully and
-nothing more. It is fine to explain relevant implementation details in prose but
-they should not be real entries in the documentation.
+Rustdoc is supposed to include everything users need to use the crate fully and nothing more. It is fine to explain
+relevant implementation details in prose but they should not be real entries in the documentation.
 
-Especially be selective about which impls are visible in rustdoc -- all the ones
-that users would need for using the crate fully, but no others. In the following
-code the rustdoc of `PublicError` by default would show the `From<PrivateError>`
-impl. We choose to hide it with `#[doc(hidden)]` because users can never have a
-`PrivateError` in their code so this impl would never be relevant to them.
+Especially be selective about which impls are visible in rustdoc -- all the ones that users would need for using the
+crate fully, but no others. In the following code the rustdoc of `PublicError` by default would show the
+`From<PrivateError>` impl. We choose to hide it with `#[doc(hidden)]` because users can never have a `PrivateError` in
+their code so this impl would never be relevant to them.
 
 ```rust
 // This error type is returned to users.
@@ -272,8 +255,7 @@ impl From<PrivateError> for PublicError {
 }
 ```
 
-[`pub(crate)`] is another great tool for removing implementation details from
-the public API. It allows items to be used from outside of their own module but
-not outside of the same crate.
+[`pub(crate)`] is another great tool for removing implementation details from the public API. It allows items to be used
+from outside of their own module but not outside of the same crate.
 
 [`pub(crate)`]: https://github.com/rust-lang/rfcs/blob/master/text/1422-pub-restricted.md

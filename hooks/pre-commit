@@ -1,0 +1,23 @@
+#!/bin/sh
+# Pre-commit hook for this repo: keep the tree formatted with `nix fmt`.
+# Installed into .git/hooks by home-manager (see users/kui04 default.nix,
+# installNixConfigGitHook). Do not edit the installed copy; edit this file.
+#
+# Behaviour: if the tree is already clean, the commit proceeds. Otherwise the
+# hook runs `nix fmt` for you, blocks the commit, and asks you to review the
+# formatting diff and commit again. It never stages files on your behalf.
+set -u
+
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+cd "$repo_root" || exit 1
+
+# NOTE: `nix fmt -- --fail-on-change` still writes formatting fixes and then
+# exits non-zero if it changed anything (treefmt semantics: format + report).
+if nix fmt -- --fail-on-change >/dev/null 2>&1; then
+    exit 0
+fi
+
+cat >&2 <<'EOF'
+pre-commit: `nix fmt` reformatted files (see `git diff`). Review, re-stage if it looks right, and commit again.
+EOF
+exit 1

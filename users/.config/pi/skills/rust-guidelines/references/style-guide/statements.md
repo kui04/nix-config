@@ -4,8 +4,7 @@
 
 ## Let statements
 
-Put a space after the `:` and on both sides of the `=` (if they are present).
-Don't put a space before the semicolon.
+Put a space after the `:` and on both sides of the `=` (if they are present). Don't put a space before the semicolon.
 
 ```rust
 // A comment.
@@ -16,19 +15,17 @@ let pattern: Type;
 let pattern = expr;
 ```
 
-If possible, format the declaration on a single line. If not possible, then try
-splitting after the `=`, if the declaration fits on two lines. Block-indent the
-expression.
+If possible, format the declaration on a single line. If not possible, then try splitting after the `=`, if the
+declaration fits on two lines. Block-indent the expression.
 
 ```rust
 let pattern: Type =
     expr;
 ```
 
-If the first line still does not fit on a single line, split after the `:`, and
-use block indentation. If the type requires multiple lines, even after
-line-breaking after the `:`, then place the first line on the same line as the
-`:`, subject to the [combining rules](expressions.html#combinable-expressions).
+If the first line still does not fit on a single line, split after the `:`, and use block indentation. If the type
+requires multiple lines, even after line-breaking after the `:`, then place the first line on the same line as the `:`,
+subject to the [combining rules](expressions.html#combinable-expressions).
 
 ```rust
 let pattern:
@@ -51,12 +48,10 @@ let (abcd,
 { ... }
 ```
 
-If the expression covers multiple lines, if the first line of the expression
-fits in the remaining space, it stays on the same line as the `=`, and the rest
-of the expression is not further indented. If the first line does not fit, then
-put the expression on subsequent lines, block indented. If the expression is a
-block and the type or pattern cover multiple lines, put the opening brace on a
-new line and not indented (this provides separation for the interior of the
+If the expression covers multiple lines, if the first line of the expression fits in the remaining space, it stays on
+the same line as the `=`, and the rest of the expression is not further indented. If the first line does not fit, then
+put the expression on subsequent lines, block indented. If the expression is a block and the type or pattern cover
+multiple lines, put the opening brace on a new line and not indented (this provides separation for the interior of the
 block from the type); otherwise, the opening brace follows the `=`.
 
 Examples:
@@ -104,18 +99,16 @@ let Foo {
 
 ### else blocks (let-else statements)
 
-A let statement can contain an `else` component, making it a let-else statement.
-In this case, always apply the same formatting rules to the components preceding
-the `else` block (i.e. the `let pattern: Type = initializer_expr` portion)
+A let statement can contain an `else` component, making it a let-else statement. In this case, always apply the same
+formatting rules to the components preceding the `else` block (i.e. the `let pattern: Type = initializer_expr` portion)
 as described [for other let statements](#let-statements).
 
-Format the entire let-else statement on a single line if all the following are
-true:
+Format the entire let-else statement on a single line if all the following are true:
 
-* the entire statement is *short*
-* the `else` block contains only a single-line expression and no statements
-* the `else` block contains no comments
-* the let statement components preceding the `else` block can be formatted on a single line
+- the entire statement is _short_
+- the `else` block contains only a single-line expression and no statements
+- the `else` block contains no comments
+- the let statement components preceding the `else` block can be formatted on a single line
 
 ```rust
 let Some(1) = opt else { return };
@@ -123,15 +116,13 @@ let Some(1) = opt else { return };
 
 Otherwise, the let-else statement requires some line breaks.
 
-If breaking a let-else statement across multiple lines, never break between the
-`else` and the `{`, and always break before the `}`.
+If breaking a let-else statement across multiple lines, never break between the `else` and the `{`, and always break
+before the `}`.
 
-If the let statement components preceding the `else` can be formatted on a
-single line, but the let-else does not qualify to be placed entirely on a
-single line, put the `else {` on the same line as the initializer expression,
-with a space between them, then break the line after the `{`. Indent the
-closing `}` to match the `let`, and indent the contained block one step
-further.
+If the let statement components preceding the `else` can be formatted on a single line, but the let-else does not
+qualify to be placed entirely on a single line, put the `else {` on the same line as the initializer expression, with a
+space between them, then break the line after the `{`. Indent the closing `}` to match the `let`, and indent the
+contained block one step further.
 
 ```rust
 let Some(1) = opt else {
@@ -144,9 +135,8 @@ let Some(1) = opt else {
 };
 ```
 
-If the let statement components preceding the `else` can be formatted on a
-single line, but the `else {` does not fit on the same line, break the line
-before the `else`.
+If the let statement components preceding the `else` can be formatted on a single line, but the `else {` does not fit on
+the same line, break the line before the `else`.
 
 ```rust
     let Some(x) = some_really_really_really_really_really_really_really_really_really_long_name
@@ -155,15 +145,13 @@ before the `else`.
     };
 ```
 
-If the initializer expression is multi-line, put the `else` keyword and opening
-brace of the block (i.e. `else {`) on the same line as the end of the
-initializer expression, with a space between them, if and only if all the
-following are true:
+If the initializer expression is multi-line, put the `else` keyword and opening brace of the block (i.e. `else {`) on
+the same line as the end of the initializer expression, with a space between them, if and only if all the following are
+true:
 
-* The initializer expression ends with one or more closing
-  parentheses, square brackets, and/or braces
-* There is nothing else on that line
-* That line has the same indentation level as the initial `let` keyword.
+- The initializer expression ends with one or more closing parentheses, square brackets, and/or braces
+- There is nothing else on that line
+- That line has the same indentation level as the initial `let` keyword.
 
 For example:
 
@@ -180,9 +168,8 @@ let Some(x) = y.foo(
 }
 ```
 
-Otherwise, put the `else` keyword and opening brace on the next line after the
-end of the initializer expression, with the `else` keyword at the same
-indentation level as the `let` keyword.
+Otherwise, put the `else` keyword and opening brace on the next line after the end of the initializer expression, with
+the `else` keyword at the same indentation level as the `let` keyword.
 
 For example:
 
@@ -234,9 +221,8 @@ fn main() {
 
 ## Macros in statement position
 
-For a macro use in statement position, use parentheses or square brackets as
-delimiters, and terminate it with a semicolon. Do not put spaces around the
-name, `!`, the delimiters, or the `;`.
+For a macro use in statement position, use parentheses or square brackets as delimiters, and terminate it with a
+semicolon. Do not put spaces around the name, `!`, the delimiters, or the `;`.
 
 ```rust
 // A comment.
@@ -251,8 +237,8 @@ Do not put space between the expression and the semicolon.
 <expr>;
 ```
 
-Terminate all expressions in statement position with a semicolon, unless they
-end with a block or are used as the value for a block.
+Terminate all expressions in statement position with a semicolon, unless they end with a block or are used as the value
+for a block.
 
 E.g.,
 
@@ -269,8 +255,7 @@ loop {
 }
 ```
 
-Use a semicolon where an expression has void type, even if it could be
-propagated. E.g.,
+Use a semicolon where an expression has void type, even if it could be propagated. E.g.,
 
 ```rust
 fn foo() { ... }
