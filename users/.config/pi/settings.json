@@ -8,13 +8,13 @@
     "npm:pi-zentui",
     "git:github.com/DietrichGebert/ponytail"
   ],
-
   "followUpMode": "all",
   "quietStartup": true,
   "steeringMode": "all",
   "httpIdleTimeoutMs": 60000,
   "npmCommand": ["npm"],
-  
+  "tuiMode": "fullscreen",
+
   "observational-memory": {
     "observeAfterTokens": 10000,
     "reflectAfterTokens": 20000,
