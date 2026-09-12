@@ -27,5 +27,11 @@
     "agentMaxTurns": 16,
     "passive": false,
     "debugLog": false
+  },
+
+  "ast-edit": {
+    "traceEnabled": true,
+    "autoReflect": true,
+    "reflectAfterErrors": 5
   }
 }
