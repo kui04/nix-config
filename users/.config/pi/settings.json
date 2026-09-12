@@ -1,13 +1,13 @@
 {
   "packages": [
     "npm:pi-ask-user",
-    "npm:pi-hashline-edit",
     "npm:pi-mcp-adapter",
-    "npm:pi-observational-memory",
     "npm:pi-permission-system",
-    "npm:pi-zentui",
-    "git:github.com/DietrichGebert/ponytail"
+    "git:github.com/DietrichGebert/ponytail",
+    "git:github.com/elpapi42/pi-observational-memory",
+    "git:github.com/kui04/pi-ast-edit@dev"
   ],
+
   "followUpMode": "all",
   "quietStartup": true,
   "steeringMode": "all",
