@@ -28,6 +28,7 @@ in
       devenv
       entr
       ffmpeg-full
+      gh
       gnome-system-monitor
       llm-agents.opencode
       lm_sensors
@@ -92,7 +93,7 @@ in
   # starship
   programs.starship.enable = true;
   programs.starship.enableBashIntegration = true;
-  programs.starship.settings = builtins.fromTOML (builtins.readFile ../.config/starship.toml);
+  programs.starship.settings = fromTOML (builtins.readFile ../.config/starship.toml);
 
   # git config
   programs.git.enable = true;
