@@ -3,6 +3,7 @@
     "npm:pi-ask-user",
     "npm:pi-mcp-adapter",
     "npm:pi-permission-system",
+    "npm:pi-zentui",
     "git:github.com/DietrichGebert/ponytail",
     "git:github.com/elpapi42/pi-observational-memory",
     "git:github.com/kui04/pi-ast-edit@dev"
