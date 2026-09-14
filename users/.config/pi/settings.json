@@ -6,6 +6,7 @@
     "npm:pi-zentui",
     "git:github.com/DietrichGebert/ponytail",
     "git:github.com/elpapi42/pi-observational-memory",
+    "git:github.com/fgrehm/pi-ollama-cloud",
     "git:github.com/kui04/pi-ast-edit@dev"
   ],
 
@@ -13,18 +14,19 @@
   "quietStartup": true,
   "steeringMode": "all",
   "httpIdleTimeoutMs": 60000,
-  "npmCommand": ["npm"],
+  "npmCommand": [ "npm" ],
   "tuiMode": "fullscreen",
 
   "observational-memory": {
-    "observeAfterTokens": 10000,
-    "reflectAfterTokens": 20000,
-    "compactAfterTokens": 81000,
+    "observeAfterTokens": 20000,
+    "reflectAfterTokens": 50000,
+    "compactAfterTokens": 128000,
     "compactAfterTokensMode": "ratio",
-    "compactAfterTokensRatio": 0.618,
+    "compactAfterTokensRatio": 0.382,
     "observationsPoolMaxTokens": 20000,
     "observationsPoolTargetTokens": 10000,
     "agentMaxTurns": 16,
+    "model": { "thinking": "off" },
     "passive": false,
     "debugLog": false
   },
