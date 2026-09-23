@@ -22,7 +22,7 @@
     "reflectAfterTokens": 50000,
     "compactAfterTokens": 128000,
     "compactAfterTokensMode": "ratio",
-    "compactAfterTokensRatio": 0.382,
+    "compactAfterTokensRatio": 0.618,
     "observationsPoolMaxTokens": 20000,
     "observationsPoolTargetTokens": 10000,
     "agentMaxTurns": 16,
