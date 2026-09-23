@@ -1,6 +1,6 @@
 ---
 name: rust-guidelines
-description:
+description: >-
   Idiomatic Rust playbook merging Microsoft's Pragmatic Rust Guidelines with the official Rust API Guidelines, Rust
   Style Guide, Rust Design Patterns, and the Rust Reference's undefined-behavior rules. Use for any Rust work — writing,
   reviewing, refactoring, or designing code; crate and API design; naming; error handling; unsafe and FFI; macros;

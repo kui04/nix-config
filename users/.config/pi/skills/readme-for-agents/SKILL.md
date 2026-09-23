@@ -1,6 +1,6 @@
 ---
 name: readme-for-agents
-description:
+description: >-
   'Create, review, or improve AGENTS.md files — the open "README for agents" format (agents.md) that gives AI coding
   agents a predictable place for project context: setup/build/test commands, code style, testing and PR conventions. Use
   whenever the user asks to write, scaffold, audit, or fix an AGENTS.md, add agent instructions to a repository, onboard

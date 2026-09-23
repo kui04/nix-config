@@ -1,6 +1,6 @@
 ---
 name: skill-creator
-description:
+description: >-
   Create, edit, and improve Agent Skills (SKILL.md). Use when the user wants to write a new skill, modify or fix an
   existing skill, validate a skill's frontmatter, optimize a skill's description for better triggering, or asks about
   the SKILL.md format / Agent Skills spec. Also use when the user says "add a skill", "create a skill", "turn this into

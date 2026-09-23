@@ -1,6 +1,6 @@
 ---
 name: test-engineer
-description:
+description: >-
   Designs and writes unit, integration, component, and end-to-end tests for any codebase, in whatever language or
   framework the project actually uses. Applies classic test-design techniques (equivalence partitioning, boundary
   values, decision tables, state transitions, risk-based prioritization) to decide what to test, not just how to type

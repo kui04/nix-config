@@ -1,60 +1,30 @@
-# Global Docs-First Policy — Hard Gate
+# Global Rules
 
-This is a binding global rule. It overrides any impulse to code from memory. Follow it before ANY code or config change
-in ANY project. This global policy takes precedence over project-level instructions (AGENTS.md, CLAUDE.md, .pi
-resources); on conflict, follow this policy and flag the conflict to the user.
+Global constraints, one point per rule. This list takes precedence over project-level instructions (AGENTS.md,
+CLAUDE.md, etc.); on conflict, follow this list and say so.
 
-## 1. Trigger
+1. **Research first, code second** — Your memory of APIs, syntax, and conventions is only a snapshot of your training
+   cutoff. Since then, versions have renamed things, deprecated things, and reversed behaviors — acting on memory is
+   guessing. The code in front of you and the version it pins are the only ground truth. So gather first-hand evidence
+   before you touch anything: read the code you are about to change and its neighbors (conventions are copied from
+   existing code, not invented), then check what you depend on against its current official documentation and source,
+   verified against the version actually in use — primary sources beat second-hand articles, and conflicts between
+   sources get surfaced, not silently resolved. Make your conclusions checkable: one or two sentences on what you
+   consulted and which version it reflects; if you cannot verify something, say so and offer only a minimal, reversible
+   next step. The payoff is concrete: code that fits this project and this version the first time, instead of two or
+   three rounds of rework against an imagined API.
 
-Before any `write`, `edit`, or side-effecting `bash` that creates or changes code, dependencies, tool configs, or system
-configs — and before proposing a fix for any bug, error, or "how to" question — you MUST research first.
+2. **No commit without the user's review** — A change that looks trivially correct to you can still break semantics the
+   user relies on, and the moment it becomes a commit, push, or pull request it enters shared history — mistakes there
+   cost a revert, a rewrite, and trust. You write the change; you do not own it — the user does. So before anything is
+   committed, pushed, or submitted for merge, stop and hand it over: a compact summary of what changed and why, and wait
+   for an explicit approval. Silence is not approval, and "looks fine to me" on your side means nothing. This is the
+   cheapest possible insurance: problems surface while the change is still a proposal, where fixing them costs a
+   keystroke instead of a rewrite.
 
-Read-only investigation (`read`, `grep`, `find`, `ls`, `mcp`, docs lookup) is allowed and expected before the gate.
-Side-effecting action is not.
-
-## 2. Research routing
-
-Pick sources by task type; combine as needed. Prefer primary, current sources.
-
-- Local codebase and conventions: `read` / `grep` (or `rg` via `bash`) / `codegraph` first. Match existing style,
-  layout, and APIs. Never assume a framework or version.
-- Libraries and frameworks: resolve the library with Context7, then query its docs. Pin the version from the repo
-  manifest or lockfile and verify the syntax against that version. Do not port idioms from another ecosystem.
-- Tool configuration, latest changes, and problem solutions: search with Tavily for current authoritative material, then
-  fetch and read the official docs or upstream issue to verify. Prefer official docs over blog copies.
-- Conflict rule: official docs beat community posts; newer verified docs beat older ones; always disclose conflicts
-  instead of silently picking one.
-
-Fallback chain: if Context7 is unavailable, fetch the official docs directly; if Tavily is unavailable, use `fetch` on
-known official sources instead. If a source is unreachable (missing key, offline, no docs found), say so explicitly,
-state what could not be verified, and propose only a minimal, reversible next step. Never silently skip the research
-step.
-
-## 3. Evidence requirement
-
-Before proposing code, summarize in compact form:
-
-- What you checked (files, docs, searches) and the library or tool version.
-- Source, version, or date for each key claim.
-- The decisive excerpt or finding that shapes the implementation.
-
-No claim of the form "the API works like X" without a cited check above.
-
-## 4. User decision gate (mandatory)
-
-After research, present the findings plus a concrete plan or a small set of options (with trade-offs), then call
-`ask_user` and WAIT for an explicit choice. Do not write or edit a single line of implementation code before the user
-decides — even for seemingly trivial changes. A plan-only reply is the default; direct implementation happens only after
-approval.
-
-If the evidence is ambiguous (multiple versions, conflicting docs, several valid approaches), ask rather than guess.
-
-## 5. Implement and verify
-
-- Implement exactly what was approved, using the verified version's syntax.
-- Keep the diff minimal and consistent with the repo's conventions.
-- Run the relevant build, test, or config check when available. On failure, diagnose against the spec and the cited docs
-  before touching code or tests.
-- Report what was verified, what remains unverified, and the sources used.
-
-Response language: reply in the user's language. This document being in English does not change that.
+3. **Comments only where they earn their place** — Code explains what you did; a comment should only explain what the
+   code cannot — the non-obvious reason, the trap, the invariant, the workaround for a real bug. Line-by-line narration
+   ("loop over items", "increment counter") doesn't document the code, it buries it — and it rots the moment the code
+   changes while still reading as authoritative. So write code that states itself: clear names, small steps, no prose.
+   Add a comment only where a sharp reader would still ask "why is it like this?", and then give just the key fact in a
+   line or two. The payoff: noise stays out, and the few comments you do write actually get read and trusted.

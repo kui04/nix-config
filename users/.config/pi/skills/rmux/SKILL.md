@@ -1,6 +1,6 @@
 ---
 name: rmux
-description:
+description: >-
   Run persistent terminal sessions and automate terminal output with rmux, the tmux-compatible terminal multiplexer
   installed on this machine. Use it whenever a command is long-running (builds, test suites, dev servers, watches),
   needs to keep running across multiple shell invocations, runs an interactive TUI app (REPL, editor, another coding
