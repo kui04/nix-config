@@ -81,14 +81,34 @@ in
   programs.bash.enable = true;
 
   programs.bash.shellAliases = {
-    clean = "sudo nix-collect-garbage -d";
     nf = "nix flake new -t github:nix-community/nix-direnv";
     niri-socket = "export NIRI_SOCKET=$(find /run/user/$(id -u) -maxdepth 1 -name 'niri.*.sock' 2>/dev/null | head -n1)";
     reboot-to-win = "systemctl reboot --boot-loader-entry=auto-windows";
+    # nixos-rebuild commands (flake)
     ug = "sudo nixos-rebuild switch --flake ~/.nix-config#thinkbook";
     up = "sudo nix flake update --flake ~/.nix-config";
     ut = "sudo nixos-rebuild test --flake ~/.nix-config#thinkbook";
+    clean = "sudo nix-collect-garbage -d";
+    # waydroid window size presets (20:9 phone, 16:10 tablet, 16:9 fhd)
+    waydroid-phone = "waydroid-size 450 1000";
+    waydroid-tablet = "waydroid-size 1280 800";
+    waydroid-fhd = "waydroid-size 1920 1080";
   };
+
+  # waydroid-size <width> <height>: set android resolution and restart session
+  programs.bash.bashrcExtra = ''
+    waydroid-size() {
+      if [ $# -ne 2 ]; then
+        echo "usage: waydroid-size <width> <height> (e.g. waydroid-size 450 1000)"
+        return 1
+      fi
+      waydroid prop set persist.waydroid.width "$1" || return 1
+      waydroid prop set persist.waydroid.height "$2" || return 1
+      waydroid session stop
+      setsid nohup waydroid session start > /tmp/waydroid-session.log 2>&1 < /dev/null & disown
+      echo "waydroid size set to $1x$2, session restarting (log: /tmp/waydroid-session.log)"
+    }
+  '';
 
   # starship
   programs.starship.enable = true;
