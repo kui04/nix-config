@@ -6,7 +6,8 @@
     "npm:pi-zentui",
     "git:github.com/elpapi42/pi-observational-memory",
     "git:github.com/fgrehm/pi-ollama-cloud",
-    "git:github.com/kui04/pi-ast-edit@dev"
+    "git:github.com/kui04/pi-ast-edit@dev",
+    "git:github.com/patlux/pi-commandcode-provider"
   ],
 
   "followUpMode": "all",
@@ -17,15 +18,15 @@
   "tuiMode": "fullscreen",
 
   "observational-memory": {
-    "observeAfterTokens": 20000,
-    "reflectAfterTokens": 50000,
-    "compactAfterTokens": 128000,
+    "observeAfterTokens": 10000,
+    "reflectAfterTokens": 20000,
+    "compactAfterTokens": 81000,
     "compactAfterTokensMode": "ratio",
     "compactAfterTokensRatio": 0.618,
     "observationsPoolMaxTokens": 20000,
     "observationsPoolTargetTokens": 10000,
     "agentMaxTurns": 16,
-    "model": { "thinking": "off" },
+    "model": { "thinking": "low" },
     "passive": false,
     "debugLog": false
   },

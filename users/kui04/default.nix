@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  inputs,
   username,
   ...
 }:
@@ -43,6 +44,8 @@ in
       unstable.zellij
       unstable.zed-editor
       unstable.helix
+      # from its own flake
+      inputs.boo.packages.${stdenv.hostPlatform.system}.default
     ];
   };
 

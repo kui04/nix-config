@@ -48,9 +48,7 @@ in
     pi
     ripgrep
     unstable.codegraph
-    unstable.rmux
     unstable.rtk
-    unstable.ollama-cuda
   ];
 
   home.file.".pi/agent/APPEND_SYSTEM.md".source = "${config}/APPEND_SYSTEM.md";
