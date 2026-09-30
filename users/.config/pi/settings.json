@@ -1,7 +1,6 @@
 {
   "packages": [
     "npm:pi-ask-user",
-    "npm:pi-mcp-adapter",
     "npm:pi-permission-system",
     "npm:pi-zentui",
     "git:github.com/elpapi42/pi-observational-memory",
@@ -16,6 +15,7 @@
   "httpIdleTimeoutMs": 60000,
   "npmCommand": [ "npm" ],
   "tuiMode": "fullscreen",
+  "defaultTools":["+codemode"],
 
   "observational-memory": {
     "observeAfterTokens": 10000,

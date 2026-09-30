@@ -1,9 +1,4 @@
-{ 
-  "settings": {
-    "showStatusIcon": false,
-    "mcpFooterStatus": "compact"
-  },
-
+{
   "mcpServers": {
     "chrome-devtools": {
       "command": "npx",
@@ -11,63 +6,52 @@
         "-y",
         "chrome-devtools-mcp@latest",
         "--browser-url=http://127.0.0.1:9222"
-      ],
-      "lifecycle": "lazy"
+      ]
     },
     "codegraph": {
       "command": "codegraph",
-      "args": [
-        "serve",
-        "--mcp"
-      ],
-      "lifecycle": "lazy"
+      "args": ["serve", "--mcp"]
     },
     "context7": {
       "url": "https://mcp.context7.com/mcp",
-      "auth": "bearer",
-      "header": {
-        "CONTEXT7_API_KEY": "YOUR_CONTEXT7_API_KEY"
-      },
-      "lifecycle": "lazy"
+      "headers": { "CONTEXT7_API_KEY": "${CONTEXT7_API_KEY}" },
+      "exposure": "direct"
     },
     "devenv": {
       "command": "devenv",
-      "args": [
-        "mcp"
-      ],
-      "lifecycle": "lazy"
+      "args": ["mcp"]
     },
     "fetch": {
       "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "mcp/fetch"
-      ],
-      "lifecycle": "keep-alive"
+      "args": ["run", "-i", "--rm", "mcp/fetch"],
+      "exposure": "direct"
     },
     "github": {
       "url": "https://api.githubcopilot.com/mcp/",
-      "auth": "bearer",
-      "headers": {
-        "Authorization": "YOUR_GITHUB_PAT"
-      },
-      "lifecycle": "lazy"
+      "headers": { "Authorization": "Bearer ${GITHUB_PAT}" },
+      "exposure": "codemode",
+      "toolExposure": {
+        "search_issues": "direct",
+        "search_code": "direct",
+        "search_repositories": "direct",
+        "issue_read": "direct",
+        "pull_request_read": "direct",
+        "get_file_contents": "direct",
+        "list_issues": "direct",
+        "list_pull_requests": "direct"
+      }
     },
     "playwright": {
       "command": "npx",
-      "args": [
-        "@playwright/mcp@latest",
-        "--isolated",
-        "--browser",
-        "chromium"
-      ],
-      "lifecycle": "lazy"
+      "args": ["@playwright/mcp@latest", "--isolated", "--browser", "chromium"]
     },
     "tavily": {
-      "url": "https://mcp.tavily.com/mcp/?tavilyApiKey=YOUR_TAVILY_API_KEY",
-      "lifecycle": "lazy"
+      "url": "https://mcp.tavily.com/mcp/?tavilyApiKey=${TAVILY_API_KEY}",
+      "exposure": "codemode",
+      "toolExposure": {
+        "tavily_search": "direct",
+        "tavily_extract": "direct"
+      }
     }
   }
 }
