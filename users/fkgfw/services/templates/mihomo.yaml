@@ -37,6 +37,15 @@ dns:
     - "*.test"
     - localhost.ptlogin2.qq.com
     - "+.msftconnecttest.com"
+    # 以下域名返回真实 IP,避免 fake-ip 干扰连通性检测、NTP 对时、STUN 通话
+    - "+.msftncsi.com"
+    - "time.*.com"
+    - "+.pool.ntp.org"
+    - "+.ntp.org.cn"
+    - "+.market.xiaomi.com"
+    - "stun.*.*"
+    - "+.stun.*.*"
+    - "+.stun.*.*.*"
   default-nameserver: 
     - 223.5.5.5
     - 119.29.29.29
@@ -88,18 +97,31 @@ proxy-groups:
 rules:
   # 广告屏蔽
   - GEOSITE,category-ads-all,REJECT
- 
+
   # 私有网络直连
+  - GEOSITE,private,DIRECT
   - GEOIP,private,DIRECT,no-resolve
-  
-  # 中国大陆 IP 直连
-  - GEOIP,cn,DIRECT,no-resolve
-  
+
+  # 在国内有接入点的服务 CDN 直连,不消耗服务器流量;
+  # 带 @cn 属性的规则必须放在 GEOSITE,geolocation-!cn 之前才会生效
+  - GEOSITE,category-games@cn,DIRECT
+  - GEOSITE,apple-cn,DIRECT
+  - GEOSITE,google-play@cn,DIRECT
+
+  # Google 系全部走代理,必须位于 GEOSITE,cn 之前 ——
+  # geosite:cn 含有 dl.google.com、clientservices.googleapis.com 等条目,
+  # 并通过 tld-cn 直连全部 .cn 域名(googleapis.cn、google.cn 等)
+  - GEOSITE,google,Proxy
+
+  # 非中国域名走代理(包含 GFW 列表)
+  - GEOSITE,geolocation-!cn,Proxy
+
   # 中国大陆域名直连
   - GEOSITE,cn,DIRECT
-  
-  # 非中国域名走代理（包含 GFW、Google 等）
-  - GEOSITE,geolocation-!cn,Proxy
-  
+
+  # 其余域名解析出真实 IP 后按归属直连;不能加 no-resolve,
+  # 否则带域名的连接会跳过此规则,漏网的国内域名会被误代理
+  - GEOIP,cn,DIRECT
+
   # 兜底规则
   - MATCH,Proxy
