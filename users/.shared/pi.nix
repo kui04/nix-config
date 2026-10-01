@@ -57,8 +57,7 @@ in
   home.file.".pi/agent/pi-permissions.jsonc".source = "${config}/pi-permissions.jsonc";
   home.file.".pi/agent/zentui.json".source = "${config}/zentui.json";
   home.file.".pi/agent/npm/.npmrc".source = "${config}/.npmrc";
-
-  home.file.".pi/agent/mcp.json".source = "${config}/mcp-template.json";
+  home.file."Templates/pi-mcp.json".source = "${config}/mcp-template.json";
 
   # reconcile pi's npm and git extensions on rebuild.
   home.activation.refreshPiNpm = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
