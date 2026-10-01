@@ -5,7 +5,6 @@
 
     # unstable package overlays
     overlays = [
-      (import ./codegraph.nix)
       (import ./hmcl.nix)
     ];
   };
