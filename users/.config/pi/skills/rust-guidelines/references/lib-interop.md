@@ -1,6 +1,6 @@
-<!-- Source: microsoft/rust-guidelines src/guidelines/libs/interop (book version 2026.6) -->
+<!-- Copyright (c) Microsoft Corporation. Licensed under the MIT license. -->
 
-# Library Interoperability (Pragmatic Rust Guidelines)
+# Libraries / Interoperability Guidelines
 
 ## Types are Send (M-TYPES-SEND) { #M-TYPES-SEND }
 
@@ -92,7 +92,7 @@ async fn foo() {
 >
 > <div style="background-color:white;">
 >
-> ![TEXT](M-TYPES-SEND.png)
+> ![TEXT](https://media.githubusercontent.com/media/microsoft/rust-guidelines/19723b30aadf1854fef6a56c2da2395dc03255c1/src/guidelines/libs/interop/M-TYPES-SEND.png)
 >
 > </div>
 >
@@ -176,7 +176,7 @@ genuinely different types of the same name from other crates.
 When a crate accepts or returns a type defined in some third-party crate, users are expected to depend on that
 third-party crate directly and import the type from there. That said, there are a few valid exceptions to this rule:
 
-- Umbrella crates (compare [M-DONT-LEAK-TYPES](./#M-DONT-LEAK-TYPES)) by definition re-export other types
+- Umbrella crates (compare [M-DONT-LEAK-TYPES](#M-DONT-LEAK-TYPES)) by definition re-export other types
 - Crates split for technical reasons (e.g., exporting `foo_core::Url` from `foo`)
 - Macro use to provide stable paths, e.g., via some hidden `foo::__private::Url`
 
@@ -203,7 +203,7 @@ fn send_network(x: impl AsRef<[u8]>) {}
 
 // Further analysis needed. In these cases the function wants
 // ownership of some `String` or `Vec<u8>`. If those are
-// "low freqency, low volume" functions `AsRef` has better ergonomics,
+// "low frequency, low volume" functions `AsRef` has better ergonomics,
 // otherwise accepting a `String` or `Vec<u8>` will have better
 // performance.
 fn new_instance(x: impl AsRef<str>) -> HoldsString {}
@@ -281,4 +281,4 @@ Synchronous functions should use [`std::io::Read`](https://doc.rust-lang.org/std
 runtime should use [`futures::io::AsyncRead`](https://docs.rs/futures/latest/futures/io/trait.AsyncRead.html) and
 similar. _Types_ that need to perform runtime-specific, continuous I/O should follow [M-RUNTIME-ABSTRACTED] instead.
 
-[M-RUNTIME-ABSTRACTED]: ./#M-RUNTIME-ABSTRACTED
+[M-RUNTIME-ABSTRACTED]: #M-RUNTIME-ABSTRACTED

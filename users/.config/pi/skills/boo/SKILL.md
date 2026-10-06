@@ -1,15 +1,15 @@
 ---
 name: boo
-description:
-  "Run and drive interactive terminal programs headlessly with the boo terminal multiplexer: REPLs (python, nix repl,
-  psql, ghci), TUIs, prompt-driven wizards and installers, dev servers, watchers, long-running builds, and nested
-  agents. Use it whenever a plain non-interactive shell call cannot do the job: the program needs a TTY or asks
-  questions (y/n, credentials, menus), state must persist across separate tool calls (persistent REPL, nix develop
-  shell, activated environment), a process must keep running to be checked on later, or the live rendered screen must be
-  read instead of log files. Trigger even when the user never says boo - phrases like interactive, it prompts for
-  confirmation, keep a session open, run it in the background and check on it later, drive the TUI, or type into the
-  program all apply. Not for one-shot commands that already work non-interactively."
-compatibility:
+description: >-
+  Run and drive terminal programs headlessly with the boo terminal multiplexer: REPLs (python, nix repl, psql, ghci),
+  TUIs, prompt-driven wizards and installers, dev servers, watchers, long-running builds and tests, and nested agents.
+  Use it instead of a long timeout wrapper, a sleep-and-poll loop, or a background job with log tailing whenever a
+  command will run for more than about a minute, needs a TTY or asks questions (y/n, credentials, menus), needs state
+  across separate tool calls (persistent REPL, nix develop shell), or must keep running to be checked on later. Trigger
+  even when the user never says boo - interactive, it prompts for confirmation, keep a session open, run it in the
+  background and check on it later, drive the TUI, and blocking calls like timeout 600 all apply. Not for commands that
+  finish in seconds and need no interaction.
+compatibility: >-
   Requires the boo binary (github.com/coder/boo, verified against v0.6.4) on PATH. Linux and macOS. Sessions are
   per-user; sockets live in $XDG_RUNTIME_DIR/boo (or /tmp/boo-<uid>); set BOO_DIR to isolate test sessions.
 ---
@@ -29,6 +29,22 @@ raw byte log.
 - The bash tool is stateless and TTY-less; boo supplies both: a persistent, interactive, observable place for processes
   to live between calls.
 
+## Reach for boo instead of blocking habits
+
+Before typing any of these into a tool call, start a session instead — each habit blocks the call or leaves you blind:
+
+| Habit                                      | boo replacement                                                                         |
+| ------------------------------------------ | --------------------------------------------------------------------------------------- |
+| `timeout 600 make test`                    | session + `send --text 'make test; echo DONE:$?'` + `wait --text 'DONE:' --timeout 30s` |
+| `cmd > log 2>&1 &` then sleep/tail loops   | session + `wait --idle` + `peek`                                                        |
+| `nohup ... & disown`                       | `boo new -d -- bash`, type commands in later                                            |
+| "is it still running? how far did it get?" | `boo ls --json` / `boo peek <name>`                                                     |
+
+A session gives what `timeout` cannot: no duration guess up front, the screen and exit status preserved when something
+stalls, the process alive across tool calls, and a place to look instead of a blindly killed process. Keep plain shell
+calls for work that finishes in seconds; reach for boo the moment a run would last more than about a minute or you would
+poll anything.
+
 ## Setup
 
 Check first, install only if missing:
@@ -47,11 +63,11 @@ command -v boo && boo version
 ## The canonical loop
 
 ```bash
-boo new work -d -- bash                    # 1. headless session running a shell
-boo send work --text 'make test' --enter   # 2. type a command into that shell
-boo wait work --text 'PASS' --timeout 2m   # 3. block until the screen shows a marker
-boo peek work                              # 4. read the rendered screen
-boo kill work                              # 5. clean up — on success and on failure
+boo new work -d -- bash                                 # 1. headless session running a shell
+boo send work --text 'make test; echo DONE:$?' --enter  # 2. run a command, print a marker you control
+boo wait work --text 'DONE:' --timeout 30s              # 3. bounded wait on that marker
+boo peek work | tail -3                                 # 4. read the result: DONE:<exit status>
+boo kill work                                           # 5. clean up — on success and on failure
 ```
 
 Run **a shell in the session and send commands into it**. Never start the payload directly (`boo new -d -- make`): a
@@ -60,10 +76,28 @@ screen to peek. A shell outlives every command typed into it.
 
 - Always pass `-d`. Without it, `boo new` tries to attach and fails in a TTY-less tool call ("attach requires a
   terminal").
-- No marker to wait for? `boo wait work --idle` fires after 2s of quiet output. Quiet is not done — dev servers are
-  never done; wait on markers for completion semantics.
-- For machine-readable status, append an echo marker and expand `$?` in the session's shell (escape it in the tool
-  call): `--text 'make; echo DONE:$?'` typed as `--text "make; echo DONE:\$?"` from double quotes.
+- Quoting: `$?` must expand in the session's shell, not in the tool call — write `--text 'make; echo DONE:$?'` in single
+  quotes, or `--text "make; echo DONE:\$?"` from double quotes.
+
+## Waiting: never guess, never block
+
+Waiting on guessed text is the standard boo failure: the wait blocks the tool call until its timeout while the real
+completion line never matched — wrong wording, or it scrolled out of the viewport long before the wait started. Follow
+this discipline:
+
+1. **Wait only on markers you control.** Send `cmd; echo DONE:$?` and wait on `DONE:`. Your marker prints last, so a
+   finished command always leaves it in the viewport, and it carries the exit status. Program-native text ("PASS",
+   "listening on") is a guess about output you have not read.
+2. **Unknown output: peek first, wait second.** Run `boo wait <name> --idle`, then `peek --scrollback` to see what the
+   program actually prints; wait on that exact observed string from then on.
+3. **Readiness of busy servers scrolls away.** If the wait may already be late (the server logged its readiness and
+   moved on to request logs), do not wait at all — `peek --scrollback | grep <text>` reads history that `wait` can no
+   longer see.
+4. **First wait is always short: 30s or less.** On exit 4, `peek` to see what is actually on screen, then decide:
+   re-wait with a marker the peek just verified, send input, or kill the session. Never repeat a failed wait unchanged,
+   and never raise the timeout without a peek that justifies it.
+5. **Never block a tool call for minutes.** The session runs detached: a short wait, other work, another short wait.
+   `--idle` plus `peek` is the fallback when no marker exists at all.
 
 ## Command reference
 
@@ -142,7 +176,8 @@ everything sent lands on the rendered screen and scrollback, readable via `peek`
 ```bash
 boo new web -d --rows 200 -- bash
 boo send web --text 'npm run dev' --enter
-boo wait web --text 'listening on' --timeout 30s
+boo wait web --idle --timeout 30s
+boo peek web --scrollback | grep -i 'listening on'  # read readiness from history, never wait on it
 # ...do other work between tool calls...
 boo peek web               # current screen; add --scrollback for history
 boo send web --key C-c     # stop it
@@ -162,10 +197,11 @@ done
 # ...later: check on all of them
 boo ls --json                                  # idle_ms shows which went quiet
 for t in unit smoke e2e; do
-  boo wait "job-$t" --text 'DONE:' --timeout 10m
-  boo peek "job-$t" | tail -3                  # the DONE:<status> line
-  boo kill "job-$t"
+  boo wait "job-$t" --text 'DONE:' --timeout 30s || true   # short wait, then look
+  boo peek "job-$t" | tail -3                              # DONE:<status>, or real progress if unfinished
 done
+# a peek that showed real progress justifies a longer re-wait; kill once every job reports DONE
+for t in unit smoke e2e; do boo kill "job-$t"; done
 ```
 
 ### Nested agents
@@ -173,8 +209,8 @@ done
 ```bash
 boo new sub -d --rows 200 -- claude    # or pi, aider, codex...
 boo send sub --text 'fix the failing test in src/foo.ts' --enter
-boo wait sub --idle --timeout 10m      # a turn settles
-boo peek sub --scrollback              # read its output
+boo wait sub --idle --timeout 30s || true   # turns take minutes: short wait, then look
+boo peek sub --scrollback | tail -20         # read its output; re-wait if it is mid-turn
 boo ls --json                          # bell_idle_ms >= 0: it rang for attention
 ```
 

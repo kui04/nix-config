@@ -1,6 +1,6 @@
-<!-- Source: microsoft/rust-guidelines src/guidelines/libs/building (book version 2026.6) -->
+<!-- Copyright (c) Microsoft Corporation. Licensed under the MIT license. -->
 
-# Library Building (Pragmatic Rust Guidelines)
+# Libraries / Building Guidelines
 
 ## Libraries work out of the box (M-OOBE) { #M-OOBE }
 
@@ -101,7 +101,7 @@ stored in the crate and verified.
 Downloading sources can fail on hermetic build environments, therefore alternative source roots should also be
 specifiable (e.g., via environment variables).
 
-[M-OOBE]: ./#M-OOBE
+[M-OOBE]: #M-OOBE
 
 ## Features are additive (M-FEATURES-ADDITIVE) { #M-FEATURES-ADDITIVE }
 

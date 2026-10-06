@@ -1,6 +1,6 @@
-<!-- Source: microsoft/rust-guidelines src/guidelines/correctness (book version 2026.6) -->
+<!-- Copyright (c) Microsoft Corporation. Licensed under the MIT license. -->
 
-# Correctness (Pragmatic Rust Guidelines)
+# Correctness Guidelines
 
 ## Unsafe needs reason, should be avoided (M-UNSAFE) { #M-UNSAFE }
 
@@ -216,7 +216,7 @@ fn parse_uri(s: &str) -> Result<Uri, ParseError> { };
 > For any user input or calling sequence that would otherwise panic, you should also explore if you can use the type
 > system to avoid panicking code paths altogether.
 
-[M-PANIC-IS-STOP]: ./#M-PANIC-IS-STOP
+[M-PANIC-IS-STOP]: #M-PANIC-IS-STOP
 
 ## Panic continuation is last resort (M-PANIC-CONTINUATION) { #M-PANIC-CONTINUATION }
 
@@ -225,8 +225,8 @@ fn parse_uri(s: &str) -> Result<Uri, ParseError> { };
 Panic recovery via `catch_unwind()` is a matter of last resort and must generally be followed by a controlled
 application restart.
 
-Panics indicate the program has reached an unrecoverable state (compare [M-PANIC-IS-STOP](./#M-PANIC-IS-STOP) and
-[M-PANIC-ON-BUG](./#M-PANIC-ON-BUG)). Library code in particular should not attempt to catch a panic and continue
+Panics indicate the program has reached an unrecoverable state (compare [M-PANIC-IS-STOP](#M-PANIC-IS-STOP) and
+[M-PANIC-ON-BUG](#M-PANIC-ON-BUG)). Library code in particular should not attempt to catch a panic and continue
 execution, as there is a risk of observing otherwise impossible state:
 
 ```rust,ignore

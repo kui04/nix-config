@@ -1,6 +1,6 @@
-<!-- Source: microsoft/rust-guidelines src/guidelines/universal (book version 2026.6) -->
+<!-- Copyright (c) Microsoft Corporation. Licensed under the MIT license. -->
 
-# Universal Guidelines (Pragmatic Rust Guidelines)
+# Universal Guidelines
 
 ## Follow the upstream guidelines (M-UPSTREAM-GUIDELINES) { #M-UPSTREAM-GUIDELINES }
 
@@ -78,7 +78,7 @@ style = { level = "warn", priority = -1 }
 suspicious = { level = "warn", priority = -1 }
 # nursery = { level = "warn", priority = -1 }  # optional, might cause more false positives
 
-# These lints are from the `restriction` lint group and prevent specific
+# Additional lints are from the `restriction` and `nursery` group that prevent specific
 # constructs being used in source code in order to drive up consistency,
 # quality, and brevity
 allow_attributes_without_reason = "warn"
@@ -96,12 +96,12 @@ map_err_ignore = "warn"
 redundant_type_annotations = "warn"
 renamed_function_params = "warn"
 semicolon_outside_block = "warn"
-string_to_string = "warn"
 undocumented_unsafe_blocks = "warn"
 unnecessary_safety_comment = "warn"
 unnecessary_safety_doc = "warn"
 unneeded_field_pattern = "warn"
 unused_result_ok = "warn"
+too_long_first_doc_paragraph = "warn"
 
 # May cause issues with structured logging otherwise.
 literal_string_with_formatting_args = "allow"
@@ -177,7 +177,7 @@ This in particular includes:
 Implementations of `Display` should follow Rust customs; this includes rendering newlines and escape sequences. The
 handling of sensitive data outlined in [M-PUBLIC-DEBUG] applies analogously.
 
-[M-PUBLIC-DEBUG]: ./#M-PUBLIC-DEBUG
+[M-PUBLIC-DEBUG]: #M-PUBLIC-DEBUG
 
 ## If in doubt, split the crate (M-SMALLER-CRATES) { #M-SMALLER-CRATES }
 
@@ -237,13 +237,14 @@ life cycle issues should likewise not be made the subject of some manager. Items
 needed, their disposal is governed by `Drop`, and only `Drop`.
 
 Regarding factories, at least the term should be avoided. While the concept `FooFactory` has its use, its canonical Rust
-name is `Builder` (compare [M-INIT-BUILDER](../libs/ux/#M-INIT-BUILDER)). A builder that can produce items repeatedly is
-still a builder.
+name is `Builder` (compare
+[M-INIT-BUILDER](https://microsoft.github.io/rust-guidelines/guidelines/libs/ux/#M-INIT-BUILDER)). A builder that can
+produce items repeatedly is still a builder.
 
 In addition, accepting factories (builders) as parameters is an unidiomatic import of OO concepts into Rust. If
 repeatable instantiation is required, functions should ask for an `impl Fn() -> Foo` over a `FooBuilder` or similar. In
 contrast, standalone builders have their use, but primarily to reduce parametric permutation complexity around optional
-values (again, [M-INIT-BUILDER](../libs/ux/#M-INIT-BUILDER)).
+values (again, [M-INIT-BUILDER](https://microsoft.github.io/rust-guidelines/guidelines/libs/ux/#M-INIT-BUILDER)).
 
 ## Names of items are short (M-SHORT-NAMES) { #M-SHORT-NAMES }
 
@@ -379,7 +380,7 @@ Use hierarchical dot-notation: `<component>.<operation>.<state>`
 event!(
     Level::INFO,
     file.path = file_path,
-    "file {{file.path}} processed succesfully",
+    "file {{file.path}} processed successfully",
 );
 
 // Good: Named events
@@ -387,7 +388,7 @@ event!(
     name: "file.processing.success", // event identifier
     Level::INFO,
     file.path = file_path,
-    "file {{file.path}} processed succesfully",
+    "file {{file.path}} processed successfully",
 );
 ```
 

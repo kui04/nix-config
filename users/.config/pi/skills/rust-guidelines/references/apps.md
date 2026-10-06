@@ -1,6 +1,6 @@
-<!-- Source: microsoft/rust-guidelines src/guidelines/apps (book version 2026.6) -->
+<!-- Copyright (c) Microsoft Corporation. Licensed under the MIT license. -->
 
-# Applications (Pragmatic Rust Guidelines)
+# Application Guidelines
 
 ## Use mimalloc for apps (M-MIMALLOC-APPS) { #M-MIMALLOC-APPS }
 
@@ -53,7 +53,7 @@ should not mix multiple application-level error types.
 
 Libraries (crates used by more than one crate) should always follow [M-ERRORS-CANONICAL-STRUCTS] instead.
 
-[M-ERRORS-CANONICAL-STRUCTS]: ../libs/ux/#M-ERRORS-CANONICAL-STRUCTS
+[M-ERRORS-CANONICAL-STRUCTS]: https://microsoft.github.io/rust-guidelines/guidelines/libs/ux/#M-ERRORS-CANONICAL-STRUCTS
 
 ## Applications target highest viable target-cpu (M-TARGET-CPU) { #M-TARGET-CPU }
 

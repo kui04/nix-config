@@ -1,6 +1,6 @@
-<!-- Source: microsoft/rust-guidelines src/guidelines/docs (book version 2026.6) -->
+<!-- Copyright (c) Microsoft Corporation. Licensed under the MIT license. -->
 
-# Documentation (Pragmatic Rust Guidelines)
+# Documentation
 
 ## First sentence is one line; approx. 15 words (M-FIRST-DOC-SENTENCE) { #M-FIRST-DOC-SENTENCE }
 
@@ -22,11 +22,11 @@ should not exceed to keep things tidy on most screens.
 
 If you keep things in a line, your docs will become easily skimmable. Compare, for example, the standard library:
 
-![TEXT](M-FIRST-DOC-SENTENCE_GOOD.png)
+![TEXT](https://media.githubusercontent.com/media/microsoft/rust-guidelines/19723b30aadf1854fef6a56c2da2395dc03255c1/src/guidelines/docs/M-FIRST-DOC-SENTENCE_GOOD.png)
 
 Otherwise, you might end up with _widows_ and a generally unpleasant reading flow:
 
-![TEXT](M-FIRST-DOC-SENTENCE_BAD.png)
+![TEXT](https://media.githubusercontent.com/media/microsoft/rust-guidelines/19723b30aadf1854fef6a56c2da2395dc03255c1/src/guidelines/docs/M-FIRST-DOC-SENTENCE_BAD.png)
 
 As a rule of thumb, the first sentence should not exceed **15 words**.
 
@@ -65,7 +65,7 @@ Great examples include:
 This does not mean every module should contain all of these items. But if there is something to say about the
 interaction of the contained types, their module documentation is the right place.
 
-[M-DOC-FIRST-SENTENCE]: ./#M-DOC-FIRST-SENTENCE
+[M-DOC-FIRST-SENTENCE]: #M-DOC-FIRST-SENTENCE
 
 ## Documentation has canonical sections (M-CANONICAL-DOCS) { #M-CANONICAL-DOCS }
 
@@ -128,7 +128,7 @@ fn copy(src: File, dst: File) {}
 When publicly re-exporting crate items via `pub use foo::Foo` or `pub use foo::*`, they show up in an opaque re-export
 block. In most cases, this is not helpful to the reader:
 
-![TEXT](M-DOC-INLINE_BAD.png)
+![TEXT](https://media.githubusercontent.com/media/microsoft/rust-guidelines/19723b30aadf1854fef6a56c2da2395dc03255c1/src/guidelines/docs/M-DOC-INLINE_BAD.png)
 
 Instead, you should annotate them with `#[doc(inline)]` at the `use` site, for them to be inlined organically:
 
@@ -143,7 +143,7 @@ pub use foo::*;
 pub use foo::Foo;
 ```
 
-![TEXT](M-DOC-INLINE_GOOD.png)
+![TEXT](https://media.githubusercontent.com/media/microsoft/rust-guidelines/19723b30aadf1854fef6a56c2da2395dc03255c1/src/guidelines/docs/M-DOC-INLINE_GOOD.png)
 
 This does not apply to `std` or 3rd party types; these should always be re-exported without inlining to make it clear
 they are external.
@@ -153,4 +153,4 @@ they are external.
 > The `#[doc(inline)]` trick above does not change [M-NO-GLOB-REEXPORTS]; you generally should not re-export items via
 > wildcards.
 
-[M-NO-GLOB-REEXPORTS]: ../libs/resilience/#M-NO-GLOB-REEXPORTS
+[M-NO-GLOB-REEXPORTS]: https://microsoft.github.io/rust-guidelines/guidelines/libs/resilience/#M-NO-GLOB-REEXPORTS

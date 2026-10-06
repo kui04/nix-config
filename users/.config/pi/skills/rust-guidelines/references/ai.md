@@ -1,6 +1,6 @@
-<!-- Source: microsoft/rust-guidelines src/guidelines/ai (book version 2026.6) -->
+<!-- Copyright (c) Microsoft Corporation. Licensed under the MIT license. -->
 
-# AI (Pragmatic Rust Guidelines)
+# AI Guidelines
 
 ## Design with AI use in mind (M-DESIGN-FOR-AI) { #M-DESIGN-FOR-AI }
 
@@ -18,7 +18,7 @@ effective:
 - **Create Idiomatic Rust API Patterns**. The more your APIs, whether public or internal, look and feel like the
   majority of Rust code in the world, the better it is for AI. Follow the
   [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/checklist.html) along with the guidelines from
-  [Library / UX](../libs/ux).
+  [Library / UX](https://microsoft.github.io/rust-guidelines/guidelines/libs/ux/).
 
 - **Provide Thorough Docs**. Agents love good detailed docs. Include docs for all of your modules and public items in
   your crate. Assume the reader has a solid, but not expert, level of understanding of Rust, and that the reader
@@ -26,7 +26,8 @@ effective:
   [C-CRATE-DOC](https://rust-lang.github.io/api-guidelines/checklist.html#c-crate-doc),
   [C-FAILURE](https://rust-lang.github.io/api-guidelines/checklist.html#c-failure),
   [C-LINK](https://rust-lang.github.io/api-guidelines/checklist.html#c-link), and
-  [M-MODULE-DOCS](../docs/#M-MODULE-DOCS) [M-CANONICAL-DOCS](../docs/#M-CANONICAL-DOCS).
+  [M-MODULE-DOCS](https://microsoft.github.io/rust-guidelines/guidelines/docs/#M-MODULE-DOCS)
+  [M-CANONICAL-DOCS](https://microsoft.github.io/rust-guidelines/guidelines/docs/#M-CANONICAL-DOCS).
 
 - **Provide Thorough Examples**. Your documentation should have directly usable examples, the repository should include
   more elaborate ones. Follow [C-EXAMPLE](https://rust-lang.github.io/api-guidelines/checklist.html#c-example)
@@ -76,10 +77,10 @@ pub use db::Connection;
 ```
 
 Similarly, re-exports of foreign items are not covered by this rule, although they should follow
-[M-FOREIGN-REEXPORTS](../libs/interop/#M-FOREIGN-REEXPORTS).
+[M-FOREIGN-REEXPORTS](https://microsoft.github.io/rust-guidelines/guidelines/libs/interop/#M-FOREIGN-REEXPORTS).
 
 Likewise, this rule also does not apply to public-but-hidden `_private` modules needed by macros, compare
-[M-MACRO-HELPERS](../macros/#M-MACRO-HELPERS).
+[M-MACRO-HELPERS](https://microsoft.github.io/rust-guidelines/guidelines/macros/#M-MACRO-HELPERS).
 
 ## Avoid meta design documentation (M-NO-META-DESIGN-DOCUMENTATION) { #M-NO-META-DESIGN-DOCUMENTATION }
 
@@ -155,7 +156,7 @@ own problems, and these need to be addressed by idioms that work for Rust. These
 
 While some language constructs simply don't translate at all (e.g., compared to C#, Rust does not have any meaningful
 reflection), others are deceptively similar and might only bite months down the line (e.g., statics, compare
-[M-AVOID-STATICS](../libs/resilience/#M-AVOID-STATICS)).
+[M-AVOID-STATICS](https://microsoft.github.io/rust-guidelines/guidelines/libs/resilience/#M-AVOID-STATICS)).
 
 As a rule of thumb, structs and their methods can have vaguely similar names, flows, inputs and outputs, as far as their
 business functionality is concerned. However, any striking technical similarity between Rust and { C#, Java, Python, ...

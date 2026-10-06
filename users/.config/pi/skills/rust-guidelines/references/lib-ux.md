@@ -1,6 +1,6 @@
-<!-- Source: microsoft/rust-guidelines src/guidelines/libs/ux (book version 2026.6) -->
+<!-- Copyright (c) Microsoft Corporation. Licensed under the MIT license. -->
 
-# Library UX (Pragmatic Rust Guidelines)
+# Libraries / UX Guidelines
 
 ## Abstractions don't visibly nest (M-SIMPLE-ABSTRACTIONS) { #M-SIMPLE-ABSTRACTIONS }
 
@@ -95,7 +95,7 @@ Smart pointers in APIs are acceptable when:
 
 - The smart pointer, based on benchmarks, significantly improves performance and the complexity is justified.
 
-[M-ABSTRACTIONS-DONT-NEST]: ./#M-ABSTRACTIONS-DONT-NEST
+[M-ABSTRACTIONS-DONT-NEST]: #M-ABSTRACTIONS-DONT-NEST
 
 ## Prefer types over generics, generics over dyn traits (M-DI-HIERARCHY) { #M-DI-HIERARCHY }
 
@@ -182,9 +182,9 @@ enum DataAccess {
 async fn read_database(x: &DataAccess) { ... }
 ```
 
-[M-AVOID-WRAPPERS]: ./#M-AVOID-WRAPPERS
-[M-MOCKABLE-SYSCALLS]: ../resilience/#M-MOCKABLE-SYSCALLS
-[M-ABSTRACTIONS-DONT-NEST]: ./#M-ABSTRACTIONS-DONT-NEST
+[M-AVOID-WRAPPERS]: #M-AVOID-WRAPPERS
+[M-MOCKABLE-SYSCALLS]: https://microsoft.github.io/rust-guidelines/guidelines/libs/resilience/#M-MOCKABLE-SYSCALLS
+[M-ABSTRACTIONS-DONT-NEST]: #M-ABSTRACTIONS-DONT-NEST
 
 ## Errors are canonical structs (M-ERRORS-CANONICAL-STRUCTS) { #M-ERRORS-CANONICAL-STRUCTS }
 
@@ -664,7 +664,7 @@ _ = Client::new();
 
 Preludes in particular do not resolve bad module design. If it looks like a prelude would make the crate easier to use
 or understand, this is almost always an indication that the existing module system needs restructuring, see
-[M-BALANCED-MODULES](./#M-BALANCED-MODULES).
+[M-BALANCED-MODULES](#M-BALANCED-MODULES).
 
 ## Parameter ordering is consistent (M-PARAMETER-CONSISTENCY) { #M-PARAMETER-CONSISTENCY }
 
@@ -718,7 +718,7 @@ Functions should be declared `async fn foo()` over `fn foo() -> impl Future` whe
 
 Functions marked `async` are more idiomatic and easier to read. An explicit `Future`-returning signature should only be
 used when required, for example inside traits or for _hot 'n heavy_ async functions, compare
-[M-ASYNC-STACK-SIZE](../../performance/#M-ASYNC-STACK-SIZE).
+[M-ASYNC-STACK-SIZE](https://microsoft.github.io/rust-guidelines/guidelines/performance/#M-ASYNC-STACK-SIZE).
 
 ```rust,ignore
 impl Foo {

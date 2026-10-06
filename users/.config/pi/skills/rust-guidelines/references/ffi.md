@@ -1,6 +1,6 @@
-<!-- Source: microsoft/rust-guidelines src/guidelines/ffi (book version 2026.6) -->
+<!-- Copyright (c) Microsoft Corporation. Licensed under the MIT license. -->
 
-# FFI (Pragmatic Rust Guidelines)
+# FFI Guidelines
 
 ## Isolate DLL state between FFI libraries (M-ISOLATE-DLL-STATE) { #M-ISOLATE-DLL-STATE }
 

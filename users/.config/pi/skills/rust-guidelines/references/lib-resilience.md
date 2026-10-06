@@ -1,6 +1,6 @@
-<!-- Source: microsoft/rust-guidelines src/guidelines/libs/resilience (book version 2026.6) -->
+<!-- Copyright (c) Microsoft Corporation. Licensed under the MIT license. -->
 
-# Library Resilience (Pragmatic Rust Guidelines)
+# Libraries / Resilience Guidelines
 
 ## I/O and system calls are mockable (M-MOCKABLE-SYSCALLS) { #M-MOCKABLE-SYSCALLS }
 
@@ -126,7 +126,7 @@ impl Library {
 }
 ```
 
-[M-RUNTIME-ABSTRACTED]: ../ux/#M-RUNTIME-ABSTRACTED
+[M-RUNTIME-ABSTRACTED]: https://microsoft.github.io/rust-guidelines/guidelines/libs/ux/#M-RUNTIME-ABSTRACTED
 
 ## Test utilities are feature gated (M-TEST-UTIL) { #M-TEST-UTIL }
 
@@ -151,7 +151,7 @@ impl HttpClient {
 }
 ```
 
-[M-MOCKABLE-SYSCALLS]: ./#M-MOCKABLE-SYSCALLS
+[M-MOCKABLE-SYSCALLS]: #M-MOCKABLE-SYSCALLS
 
 ## Integration tests live under `tests/` (M-INTEGRATION-TESTS) { #M-INTEGRATION-TESTS }
 

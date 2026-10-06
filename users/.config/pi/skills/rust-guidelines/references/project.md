@@ -1,6 +1,6 @@
-<!-- Source: microsoft/rust-guidelines src/guidelines/project (book version 2026.6) -->
+<!-- Copyright (c) Microsoft Corporation. Licensed under the MIT license. -->
 
-# Project (Pragmatic Rust Guidelines)
+# Project Guidelines
 
 ## Common settings come from the workspace Cargo.toml (M-CARGO-WORKSPACE) { #M-CARGO-WORKSPACE }
 

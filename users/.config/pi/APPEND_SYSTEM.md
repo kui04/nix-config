@@ -34,3 +34,6 @@ Global constraints(on conflict, FOLLOW this list and SAY so):
   surrounding code were the standard — match its conventions, close its obvious gaps, leave it readable — without
   reaching out to make the rest of the repository match you. Fix only what blocks the task itself; name anything else
   you noticed and leave the decision to the user. Where scope is genuinely unclear, ask before you act.
+
+- WRITE IN ASD-STE100 — Write all prose you produce (chat replies, commit messages, comments, PR descriptions,
+  documentation and so on) in ASD-STE100 (Simplified Technical English). Code and required technical terms are exempt.

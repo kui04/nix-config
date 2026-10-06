@@ -1,6 +1,6 @@
-<!-- Source: microsoft/rust-guidelines src/guidelines/performance (book version 2026.6) -->
+<!-- Copyright (c) Microsoft Corporation. Licensed under the MIT license. -->
 
-# Performance (Pragmatic Rust Guidelines)
+# Performance Guidelines
 
 ## Optimize for throughput, avoid empty cycles (M-THROUGHPUT) { #M-THROUGHPUT }
 
@@ -30,7 +30,7 @@ You should not:
 
 Shared state should only be used if the cost of sharing is less than the cost of re-computation.
 
-[M-YIELD-POINTS]: ./#M-YIELD-POINTS
+[M-YIELD-POINTS]: #M-YIELD-POINTS
 
 ## Identify, profile, optimize the hot path early (M-HOTPATH) { #M-HOTPATH }
 
@@ -261,7 +261,7 @@ Frequently used, internal, immutable sequences that will not be resized after co
 `Box<[T]>`, `Arc<str>` or similar, rather than their original `Vec<T>` or `String` counterparts.
 
 Regular growable collections consist of a `(ptr, len, capacity)` triple. Converting them to boxed slices makes them
-immutable, executes a [shrink-to-fit](./#M-SHRINK-TO-FIT), and drops the `capacity` bit, reducing their handle size by
+immutable, executes a [shrink-to-fit](#M-SHRINK-TO-FIT), and drops the `capacity` bit, reducing their handle size by
 1/3. For this pattern to be useful, the following preconditions should apply:
 
 - the sequence should be frequently instantiated (e.g., >1000's of instances),
@@ -289,7 +289,7 @@ struct Data {
 <why>a minimal memory footprint.</why>
 
 Where large, long-lived, growable collections such as `Vec` or `String` were built without an exact size reservation
-(compare [M-INITIAL-CAPACITY](./#M-INITIAL-CAPACITY)), the resulting collection should be shrunk via `shrink_to_fit`
+(compare [M-INITIAL-CAPACITY](#M-INITIAL-CAPACITY)), the resulting collection should be shrunk via `shrink_to_fit`
 before storing it.
 
 Many Rust collections grow by powers of two when iteratively adding elements. In the worst case a collection might
@@ -306,7 +306,7 @@ for x in large_iter {
 long_lived.shrink_to_fit();
 ```
 
-Note that this does not apply to conversions done via `into_boxed_*` and friends (compare [M-BOX-DST](./#M-BOX-DST)), as
+Note that this does not apply to conversions done via `into_boxed_*` and friends (compare [M-BOX-DST](#M-BOX-DST)), as
 these generally shrink before converting already.
 
 ## Use a fast hasher where possible (M-FAST-HASHER) { #M-FAST-HASHER }
@@ -320,21 +320,23 @@ Rust's default hasher is reasonably DoS safe on untrusted user input, but this c
 can trust that keys are not maliciously crafted to overflow individual buckets, a custom fast hasher can yield
 significant performance gains.
 
-````rust,ignore
+```rust,ignore
 // Bad, uses default hasher for keys we control.
 let lookup = HashMap::<UserID, Data>::with_capacity(1024);
 
 // Good, uses faster foldhash for internal keys.
 let lookup = foldhash::HashMap<UserID, Data>::with_capacity(1024);
-
+```
 
 ## Collections are created with sufficient initial capacity (M-INITIAL-CAPACITY) { #M-INITIAL-CAPACITY }
 
 <why>efficient collection creation.</why>
 
-Where the final or approximate size of a collection (`Vec`, `String`, `HashMap`, `HashSet`, etc.) is known at construction time, it should be created via   `with_capacity` rather than `new` or `default`.
+Where the final or approximate size of a collection (`Vec`, `String`, `HashMap`, `HashSet`, etc.) is known at
+construction time, it should be created via `with_capacity` rather than `new` or `default`.
 
-Collections created without capacity may be re-allocated multiple times during their initialization, which also includes copying their content. Creating them with sufficient capacity can entirely avoid this needless overhead.
+Collections created without capacity may be re-allocated multiple times during their initialization, which also includes
+copying their content. Creating them with sufficient capacity can entirely avoid this needless overhead.
 
 ```rust,ignore
 // Bad, probably re-allocates and copies content over multiple times.
@@ -348,7 +350,7 @@ let mut rval = Vec::with_capacity(other.len());
 for x in &other {
     rval.push(convert(x));
 }
-````
+```
 
 Iterator-driven construction (`collect`) inherits this behavior via `size_hint` and should be preferred over manual
 `push` loops when possible:
