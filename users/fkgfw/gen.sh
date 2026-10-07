@@ -31,9 +31,10 @@ fi
 XRAY_SERVER_TEMPLATE="$TEMPLATE_DIR/xray.jsonc"
 HY2_SERVER_TEMPLATE="$TEMPLATE_DIR/hy2.yaml"
 MIHOMO_CLIENT_TEMPLATE="$TEMPLATE_DIR/mihomo.yaml"
+SINGBOX_CLIENT_TEMPLATE="$TEMPLATE_DIR/sing-box.jsonc"
 
 # Validate templates exist
-for f in "$XRAY_SERVER_TEMPLATE" "$HY2_SERVER_TEMPLATE" "$MIHOMO_CLIENT_TEMPLATE"; do
+for f in "$XRAY_SERVER_TEMPLATE" "$HY2_SERVER_TEMPLATE" "$MIHOMO_CLIENT_TEMPLATE" "$SINGBOX_CLIENT_TEMPLATE"; do
     if [[ ! -f "$f" ]]; then
         echo "Error: Cannot find template file $f" >&2
         exit 1
@@ -72,9 +73,12 @@ nix run nixpkgs#openssl -- req -x509 -nodes -newkey ec:<(nix run nixpkgs#openssl
     -keyout "$TMP_KEY" -out "$TMP_CERT" -days 3650 \
     -subj "/CN=www.bing.com" 2>/dev/null
 
-# Get certificate SHA256 fingerprint for mihomo client
+# Get certificate SHA256 fingerprint for mihomo client (hex over DER)
+# and sing-box client (base64 over the public key DER, per sing-box
+# certificate_public_key_sha256 docs).
 FINGERPRINT=$(nix run nixpkgs#openssl -- x509 -noout -fingerprint -sha256 -in "$TMP_CERT" |
     sed 's/.*=//; s/://g; y/ABCDEF/abcdef/')
+FINGERPRINT_PUBKEY_B64=$(nix run nixpkgs#openssl -- x509 -noout -pubkey -in "$TMP_CERT" | nix run nixpkgs#openssl -- pkey -pubin -outform der | nix run nixpkgs#openssl -- dgst -sha256 -binary | nix run nixpkgs#coreutils -- base64 -w0)
 
 # --- Fill templates (without modifying originals) ---
 echo "Filling data into templates..." >&2
@@ -82,7 +86,8 @@ echo "Filling data into templates..." >&2
 TMP_XRAY_SERVER=$(mktemp)
 TMP_HY2_SERVER=$(mktemp)
 TMP_MIHOMO_CLIENT=$(mktemp)
-trap 'rm -f "$TMP_XRAY_SERVER" "$TMP_HY2_SERVER" "$TMP_MIHOMO_CLIENT" "${TMP_CERT:-}" "${TMP_KEY:-}"' EXIT
+TMP_SINGBOX_CLIENT=$(mktemp)
+trap 'rm -f "$TMP_XRAY_SERVER" "$TMP_HY2_SERVER" "$TMP_MIHOMO_CLIENT" "$TMP_SINGBOX_CLIENT" "${TMP_CERT:-}" "${TMP_KEY:-}"' EXIT
 
 # Xray server config
 sed -e "s|VLESS_UUID|$VLESS_UUID|" \
@@ -99,6 +104,14 @@ sed -e "s|HY2_PASSWORD|$HY2_PASSWORD|" \
     -e "s|VLESS_UUID|$VLESS_UUID|" \
     -e "s|VLESS_PUBLIC_KEY|$VLESS_PUBLICKEY|" \
     "$MIHOMO_CLIENT_TEMPLATE" >"$TMP_MIHOMO_CLIENT"
+
+# Sing-box client config. Password goes in plain (no URL encoding);
+# the cert pin uses the base64 public-key SHA256.
+sed -e "s|HY2_PASSWORD|$HY2_PASSWORD|" \
+    -e "s|FINGERPRINT_PUBKEY_B64|$FINGERPRINT_PUBKEY_B64|" \
+    -e "s|VLESS_UUID|$VLESS_UUID|" \
+    -e "s|VLESS_PUBLIC_KEY|$VLESS_PUBLICKEY|" \
+    "$SINGBOX_CLIENT_TEMPLATE" | grep -v '^[[:space:]]*//' >"$TMP_SINGBOX_CLIENT"
 
 # --- Encrypt with agenix ---
 cd "$SECRETS_DIR"
@@ -135,3 +148,11 @@ echo "${GREEN}=========== MIHOMO CONFIG END ===========${RESET}"
 echo "${RED}Save the mihomo config between the green markers as mihomo.yaml.${RESET}"
 echo "${RED}Replace SERVER_IP_OR_DOMAIN with IP/domain before using it.${RESET}"
 echo "${RED}Import mihomo.yaml into mihomo/Clash Meta, or start mihomo with this config file.${RESET}"
+
+echo "" >&2
+echo "${GREEN}========== SING-BOX CONFIG START ==========${RESET}"
+cat "$TMP_SINGBOX_CLIENT"
+echo "${GREEN}=========== SING-BOX CONFIG END ===========${RESET}"
+echo "${RED}Copy the sing-box config between the green markers to /etc/sing-box/config.json.${RESET}"
+echo "${RED}Replace SERVER_IP_OR_DOMAIN with the VPS IP/domain first.${RESET}"
+echo "${RED}Then run: sudo sing-box check -c /etc/sing-box/config.json && sudo systemctl restart sing-box${RESET}"

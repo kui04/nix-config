@@ -13,7 +13,6 @@
     networking.firewall.trustedInterfaces = [ "tailscale0" ];
     networking.firewall.allowedTCPPorts = [
       22 # OpenSSH
-      7897 # Clash Verge
       4096 # OpenCode
       8192 # Just for fun
     ];
@@ -25,13 +24,6 @@
 
     # bluetooth
     hardware.bluetooth.enable = true;
-
-    # clash-verge-rev
-    programs.clash-verge.package = pkgs.clash-verge-rev;
-    programs.clash-verge.enable = true;
-    programs.clash-verge.autoStart = true;
-    programs.clash-verge.tunMode = true;
-    programs.clash-verge.serviceMode = true;
 
     # tailscale
     services.tailscale.enable = true;

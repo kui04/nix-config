@@ -22,6 +22,7 @@
     ../../services/niri.nix
     ../../services/sunshine.nix
     ../../services/waydroid.nix
+    ../../services/sing-box.nix
   ];
 
   # flakes

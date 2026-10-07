@@ -19,7 +19,7 @@ in
   virtualisation.waydroid.package = pkgs.waydroid-nftables;
 
   # nftables firewall backend to match (nixos firewall rules are translated
-  # automatically; tailscale/clash/docker keep working via nft_compat).
+  # automatically; tailscale/sing-box/docker keep working via nft_compat).
   networking.nftables.enable = true;
 
   # network configuration for waydroid
