@@ -254,14 +254,23 @@
     "auto_detect_interface": true,
     "default_http_client": "proxy-client"
   },
-  "experimental": {
-    "clash_api": {
-      "external_controller": "127.0.0.1:9090",
+  // official dashboard (sing-box-dashboard.sagernet.org) talks to
+  // this gRPC-Web API, not to clash_api. enter 127.0.0.1:9090
+  // in the panel with empty secret.
+  "services": [
+    {
+      "type": "api",
+      "tag": "api",
+      "listen": "127.0.0.1",
+      "listen_port": 9090,
       "access_control_allow_origin": [
+        "http://sing-box-dashboard.sagernet.org",
         "https://sing-box-dashboard.sagernet.org"
       ],
       "access_control_allow_private_network": true
-    },
+    }
+  ],
+  "experimental": {
     "cache_file": {
       "enabled": true
     }
