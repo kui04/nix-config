@@ -8,11 +8,6 @@
     GLFW_IM_MODULE = "ibus";
   };
 
-  home.packages = with pkgs; [
-    hunspell
-    hunspellDicts.en-us-large
-  ];
-
   i18n.inputMethod = {
     type = "fcitx5";
     enable = true;
@@ -40,13 +35,9 @@
       pinyin.globalSection = {
         CloudPinyinEnabled = "True";
         CloudPinyinIndex = 2;
-        SpellEnabled = "True";
       };
       cloudpinyin.globalSection = {
         Backend = "Baidu";
-      };
-      keyboard.globalSection = {
-        EnableHintByDefault = "True";
       };
     };
   };
