@@ -1,7 +1,7 @@
 { pkgs, ... }: {
   config = {
     # set your time zone
-    time.timeZone = "Asia/Shanghai";
+    time.timeZone = "America/Los_Angeles";
     time.hardwareClockInLocalTime = true;
 
     # select internationalisation properties
