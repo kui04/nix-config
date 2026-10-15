@@ -17,6 +17,21 @@
   # validate with `sing-box check -c`, apply with a service restart.
   systemd.tmpfiles.rules = [ "d /etc/sing-box 0755 root root -" ];
 
+  # NixOS checks the reverse path at mangle+10, before sing-box restores its
+  # mark (dstnat+2) on replies from the tun. Unmarked they look spoofed and
+  # every UDP and ICMP reply is silently dropped. Restore the mark early for
+  # the tun only; physical interfaces keep the check.
+  networking.nftables.tables.sing-box-tun-rpfilter = {
+    family = "inet";
+    content = ''
+      chain prerouting {
+        type filter hook prerouting priority mangle - 1;
+        policy accept;
+        iifname "tun0" ct mark 0x2023 meta mark set ct mark
+      }
+    '';
+  };
+
   # TUN plus process-name rules need these caps. Same set as the
   # upstream sing-box.service; the NixOS module does not add any.
   # 9090 needs no firewall rule: clash api binds 127.0.0.1 and

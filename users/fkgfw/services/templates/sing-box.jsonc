@@ -58,14 +58,24 @@
     {
       "type": "tun",
       "tag": "tun-in",
+      // fixed name: the firewall rpfilter fix in services/sing-box.nix uses it
+      "interface_name": "tun0",
       "address": ["172.19.0.1/30", "fdfe:dcba:9876::1/126"],
       "stack": "system",
       "auto_route": true,
+      // stays on: off it loses all browser traffic and captures the LAN
       "auto_redirect": true,
       "strict_route": true,
-      // tailscale range stays out of the tun; it is the fallback path
-      // when the proxy breaks, and MagicDNS needs its own DNS.
-      "route_exclude_address": ["100.64.0.0/10", "fd7a:115c:a1e0::/48"]
+      // tailscale: fallback path when the proxy breaks, plus MagicDNS.
+      // NTP: the clock must sync even when the proxy is down (keep in sync
+      // with services.timesyncd.servers).
+      "route_exclude_address": [
+        "100.64.0.0/10",
+        "fd7a:115c:a1e0::/48",
+        "203.107.6.88/32",
+        "106.55.184.199/32",
+        "113.141.164.38/32"
+      ]
     }
   ],
   "outbounds": [

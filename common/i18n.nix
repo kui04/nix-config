@@ -4,6 +4,13 @@
     time.timeZone = "America/Los_Angeles";
     time.hardwareClockInLocalTime = true;
 
+    # NTP stays off the tun so the clock syncs even when the proxy is down.
+    services.timesyncd.servers = [
+      "203.107.6.88"
+      "106.55.184.199"
+      "113.141.164.38"
+    ];
+
     # select internationalisation properties
     i18n.defaultLocale = "en_US.UTF-8";
     i18n.extraLocaleSettings = {
