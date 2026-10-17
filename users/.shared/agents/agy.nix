@@ -9,14 +9,14 @@ let
   sharedSystemPrompt = ../../.config/agents/SYSTEM.md;
 
   rtkRewriteScript = pkgs.writeShellScript "rtk-rewrite.sh" ''
-    [ "$RTK_DISABLED" = "1" ] && { echo "{}"; exit 0; }
-    command -v rtk >/dev/null 2>&1 || { echo "{}"; exit 0; }
+    [ "$RTK_DISABLED" = "1" ] && { echo '{"decision": "allow"}'; exit 0; }
+    command -v rtk >/dev/null 2>&1 || { echo '{"decision": "allow"}'; exit 0; }
 
     input=$(cat)
     cmd=$(echo "$input" | ${lib.getExe pkgs.jq} -r '.toolCall.args.CommandLine // empty')
 
     if [ -z "$cmd" ] || [[ "$cmd" =~ ^[[:space:]]*rtk ]]; then
-      echo "{}"
+      echo '{"decision": "allow"}'
       exit 0
     fi
 
@@ -25,7 +25,7 @@ let
     if [ -n "$rewritten" ] && [ "$rewritten" != "$cmd" ]; then
       ${lib.getExe pkgs.jq} -n --arg rw "$rewritten" '{"decision": "allow", "overwrite": {"CommandLine": $rw}}'
     else
-      echo "{}"
+      echo '{"decision": "allow"}'
     fi
   '';
 
