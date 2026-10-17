@@ -1,0 +1,14 @@
+{
+  "rtk-rewrite": {
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "command": "~/.gemini/config/scripts/rtk-rewrite.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

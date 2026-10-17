@@ -4,14 +4,21 @@
   ...
 }:
 let
-  config = ../.config/pi;
+  config = ../../.config/pi;
+  sharedSkills = import ./skills.nix { inherit pkgs; };
+  sharedSystemPrompt = ../../.config/agents/SYSTEM.md;
 
   pi = pkgs.writeShellScriptBin "pi" ''
     export PATH="${
       lib.makeBinPath [
         pkgs.nodejs
-        pkgs.lua
+        pkgs.python3
         pkgs.git
+        pkgs.ripgrep
+        pkgs.fd
+        pkgs.jq
+        pkgs.unstable.rtk
+        pkgs.unstable.codegraph
       ]
     }:$PATH"
 
@@ -25,7 +32,7 @@ let
     mkdir -p "$HOME/.pi/agent"
     tmp=$(mktemp "$HOME/.pi/agent/settings.json.XXXXXX")
 
-    if [ -f "$settings_file" ]; then
+    if [ -f "$settings_file" ] && [ -s "$settings_file" ]; then
       ${lib.getExe pkgs.jq} -s '.[0] * .[1]' "$settings_file" "$nix_settings" > "$tmp"
     else
       cp "$nix_settings" "$tmp"
@@ -43,17 +50,16 @@ let
   '';
 in
 {
-  home.packages = with pkgs; [
-    fd
+  home.packages = [
     pi
-    ripgrep
-    unstable.codegraph
-    unstable.rtk
   ];
 
-  home.file.".pi/agent/APPEND_SYSTEM.md".source = "${config}/APPEND_SYSTEM.md";
+  # system prompt & skills for Pi
+  home.file.".pi/agent/APPEND_SYSTEM.md".source = "${sharedSystemPrompt}";
+  home.file.".pi/agent/skills".source = "${sharedSkills}";
+
+  # pi-specific configuration
   home.file.".pi/agent/extensions".source = "${config}/extensions";
-  home.file.".pi/agent/skills".source = "${config}/skills";
   home.file.".pi/agent/pi-permissions.jsonc".source = "${config}/pi-permissions.jsonc";
   home.file.".pi/agent/zentui.json".source = "${config}/zentui.json";
   home.file.".pi/agent/npm/.npmrc".source = "${config}/.npmrc";
