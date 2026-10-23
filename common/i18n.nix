@@ -40,6 +40,7 @@
       noto-fonts-cjk-serif
       noto-fonts-color-emoji
       font-awesome
+      googlesans-code
       sarasa-gothic
     ];
 
@@ -55,6 +56,7 @@
           "Noto Sans CJK SC"
         ];
         monospace = [
+          "Google Sans Code"
           "Sarasa Term SC"
           "Iosevka NF"
         ];
