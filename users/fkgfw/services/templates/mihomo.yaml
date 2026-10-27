@@ -1,8 +1,8 @@
 # A template for mihomo client config
 # The actual config is output by users/fkgfw/gen.sh
 mixed-port: 7890
-allow-lan: true
-bind-address: "*"
+allow-lan: false
+bind-address: "127.0.0.1"
 mode: rule
 log-level: info
 ipv6: true
@@ -18,7 +18,7 @@ geo-auto-update: true
 geo-update-interval: 24
 
 global-client-fingerprint: chrome
-find-process-mode: strict
+find-process-mode: off
 
 profile:
   store-selected: false
@@ -26,7 +26,7 @@ profile:
 
 dns:
   enable: true
-  listen: 0.0.0.0:1053
+  listen: 127.0.0.1:1053
   ipv6: true
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
@@ -46,14 +46,22 @@ dns:
     - "stun.*.*"
     - "+.stun.*.*"
     - "+.stun.*.*.*"
-  default-nameserver: 
+  # Only names proven to be Chinese use a domestic resolver, where CDN geo
+  # matters. Everything else goes to Cloudflare through the proxy.
+  respect-rules: true
+  default-nameserver:
     - 223.5.5.5
     - 119.29.29.29
-  nameserver: 
+  proxy-server-nameserver:
+    - https://doh.pub/dns-query
+  nameserver:
+    - https://1.1.1.1/dns-query
+  direct-nameserver:
     - https://doh.pub/dns-query
     - https://dns.alidns.com/dns-query
+  direct-nameserver-follow-policy: true
   nameserver-policy:
-    "geosite:cn,private": 
+    "geosite:cn,private":
       - https://doh.pub/dns-query
       - https://dns.alidns.com/dns-query
 

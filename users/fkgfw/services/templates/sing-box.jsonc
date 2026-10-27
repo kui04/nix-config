@@ -17,15 +17,30 @@
   ],
   "dns": {
     "servers": [
+      // Both branches are DoH: plain udp/53 is injectable on the way to the
+      // resolver, and plain tcp through the tunnel costs ~0.5s per uncached
+      // name. IP literals keep the resolver from needing its own bootstrap.
       {
-        "tag": "alidns",
-        "type": "udp",
-        "server": "223.5.5.5"
+        "tag": "dns-cn",
+        "type": "https",
+        "server": "223.5.5.5",
+        "server_port": 443,
+        "path": "/dns-query",
+        "tls": {
+          "enabled": true,
+          "server_name": "dns.alidns.com"
+        }
       },
       {
         "tag": "dns-proxy",
-        "type": "tcp",
-        "server": "8.8.8.8",
+        "type": "https",
+        "server": "1.1.1.1",
+        "server_port": 443,
+        "path": "/dns-query",
+        "tls": {
+          "enabled": true,
+          "server_name": "cloudflare-dns.com"
+        },
         "detour": "proxy"
       },
       {
@@ -45,10 +60,37 @@
         "action": "route",
         "server": "ts-dns"
       },
+      // Microsoft hands out China CDN edges to Chinese resolvers, and some of
+      // them reset TLS. Ask Cloudflare so the answer is the global CDN.
       {
-        "rule_set": ["geosite-cn", "geosite-private", "geosite-apple@cn"],
+        "domain_suffix": ["microsoft.com"],
         "action": "route",
-        "server": "alidns"
+        "server": "dns-proxy"
+      },
+      // tailscaled resolves its own control and DERP names. Keep that on the
+      // direct resolver so the tailnet still comes up when the proxy is down.
+      {
+        "process_path_regex": [".*tailscale.*"],
+        "action": "route",
+        "server": "dns-cn"
+      },
+      // Mirror the route order below: a name must resolve on the same side it
+      // connects from. Otherwise a proxy-routed name gets a domestic CDN
+      // address the VPS cannot reach, as dl.google.com did.
+      {
+        "rule_set": ["geosite-apple", "geosite-category-games@cn", "geosite-google-play@cn"],
+        "action": "route",
+        "server": "dns-cn"
+      },
+      {
+        "rule_set": ["geosite-google", "geosite-geolocation-!cn"],
+        "action": "route",
+        "server": "dns-proxy"
+      },
+      {
+        "rule_set": ["geosite-cn", "geosite-private"],
+        "action": "route",
+        "server": "dns-cn"
       }
     ],
     "final": "dns-proxy"
@@ -155,7 +197,7 @@
   ],
   "route": {
     "default_domain_resolver": {
-      "server": "alidns"
+      "server": "dns-cn"
     },
     "rule_set": [
       {
@@ -234,8 +276,10 @@
         "action": "route",
         "outbound": "direct"
       },
+      // NixOS runs the daemon as .tailscaled-wrapped, so process_name never
+      // matched and its control/DERP TCP was sent to the proxy. Match the path.
       {
-        "process_name": ["tailscaled", "tailscale", "NetworkManager"],
+        "process_path_regex": [".*tailscale.*", ".*NetworkManager$"],
         "action": "route",
         "outbound": "direct"
       },

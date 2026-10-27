@@ -144,6 +144,18 @@
   # allow it through firewall filter
   networking.firewall.trustedInterfaces = [ "virbr0" ];
 
+  # sing-box's tun hijacks port 53, so every app DNS query must reach it.
+  # tailscale registers an exclusive resolv.conf entry and forwards to an
+  # upstream that bypasses the tun, so the GFW poisons every answer before
+  # sing-box sees it. ts.net still resolves: sing-box routes it to
+  # 100.100.100.100 through its ts-dns server.
+  services.tailscale.extraSetFlags = [ "--accept-dns=false" ];
+
+  # the router's IPv6 RDNSS is link-local, so it never enters the tun either.
+  networking.resolvconf.extraConfig = ''
+    name_server_blacklist='0.0.0.0 fe80::* fe80:*'
+  '';
+
   # virtual display: an AOC 24G2W1G4 (24", 1920x1080@60/144) forced on HDMI-A-1, EDID fetched from the linuxhw database
   hardware.display.edid.linuxhw."24G2W1G4" = [
     "24G2W1G4"
