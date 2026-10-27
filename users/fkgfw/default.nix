@@ -9,9 +9,8 @@
 }:
 {
   imports = [
-    ./services/hysteria.nix
+    ./services/sing-box.nix
     ./services/systemd-system.nix
-    ./services/xray.nix
   ];
 
   home = {
@@ -36,7 +35,7 @@
     l = "ls -alh";
     ll = "ls -l";
     ls = "ls --color=tty";
-    hs = "home-manager switch --flake /root/.nix-config#fkgfw";
+    hs = "home-manager switch --flake path:/root/.nix-config#fkgfw";
   };
 
   # let hm install and manage itself

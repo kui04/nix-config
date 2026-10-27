@@ -1,0 +1,107 @@
+// A template for the sing-box server config.
+// The actual config is stored in secrets/sing-box-server.age.
+// gen.sh fills the placeholders and strips these comment lines.
+{
+  "log": {
+    "level": "info",
+    "timestamp": true
+  },
+  "inbounds": [
+    {
+      // Hysteria2 keeps the settings from the old hysteria server:
+      // UDP 443, the TLS_SERVER_NAME certificate, password auth, and a
+      // reverse-proxy masquerade page for unauthenticated HTTP/3 requests.
+      "type": "hysteria2",
+      "tag": "hy2-in",
+      "listen": "::",
+      "listen_port": 443,
+      "users": [
+        {
+          "name": "default",
+          "password": "HY2_PASSWORD"
+        }
+      ],
+      "ignore_client_bandwidth": false,
+      "up_mbps": 1000,
+      "down_mbps": 1000,
+      "masquerade": {
+        "type": "proxy",
+        "url": "https://TLS_SERVER_NAME/",
+        "rewrite_host": true
+      },
+      "tls": {
+        "enabled": true,
+        "server_name": "TLS_SERVER_NAME",
+        "alpn": ["h3"],
+        "min_version": "1.3",
+        "certificate_path": "/root/.config/sing-box/server.crt",
+        "key_path": "/root/.config/sing-box/server.key"
+      }
+    },
+    {
+      // TUIC is the low-latency UDP path. It uses its own UDP port so it
+      // does not conflict with Hysteria2 on UDP 443.
+      "type": "tuic",
+      "tag": "tuic-in",
+      "listen": "::",
+      "listen_port": 8443,
+      "users": [
+        {
+          "name": "default",
+          "uuid": "TUIC_UUID",
+          "password": "TUIC_PASSWORD"
+        }
+      ],
+      "congestion_control": "bbr",
+      "auth_timeout": "3s",
+      "zero_rtt_handshake": false,
+      "heartbeat": "10s",
+      "tls": {
+        "enabled": true,
+        "server_name": "TLS_SERVER_NAME",
+        "alpn": ["h3"],
+        "min_version": "1.3",
+        "certificate_path": "/root/.config/sing-box/server.crt",
+        "key_path": "/root/.config/sing-box/server.key"
+      }
+    },
+    {
+      // VLESS Reality is the TCP fallback. It shares TCP 443 with
+      // Hysteria2's UDP 443, so no port conflict exists.
+      "type": "vless",
+      "tag": "vless-in",
+      "listen": "::",
+      "listen_port": 443,
+      "users": [
+        {
+          "name": "default",
+          "uuid": "VLESS_UUID",
+          "flow": "xtls-rprx-vision"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "server_name": "TLS_SERVER_NAME",
+        "min_version": "1.3",
+        "reality": {
+          "enabled": true,
+          "handshake": {
+            "server": "TLS_SERVER_NAME",
+            "server_port": 443
+          },
+          "private_key": "VLESS_PRIVATEKEY",
+          "short_id": [""]
+        }
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "route": {
+    "final": "direct"
+  }
+}

@@ -18,6 +18,10 @@ fi
 TEMPLATE_DIR="$ROOT_DIR/users/fkgfw/services/templates"
 SECRETS_DIR="$ROOT_DIR/secrets"
 
+# Certificate CN, Hysteria2 SNI, and Reality handshake target. The target
+# must support TLS 1.3 and HTTP/2 and be reachable from the VPS.
+TLS_SERVER_NAME="${TLS_SERVER_NAME:-www.cloudflare.com}"
+
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
     GREEN=$'\033[32m'
     RED=$'\033[31m'
@@ -28,13 +32,12 @@ else
     RESET=""
 fi
 
-XRAY_SERVER_TEMPLATE="$TEMPLATE_DIR/xray.jsonc"
-HY2_SERVER_TEMPLATE="$TEMPLATE_DIR/hy2.yaml"
+SINGBOX_SERVER_TEMPLATE="$TEMPLATE_DIR/sing-box-server.jsonc"
 MIHOMO_CLIENT_TEMPLATE="$TEMPLATE_DIR/mihomo.yaml"
 SINGBOX_CLIENT_TEMPLATE="$TEMPLATE_DIR/sing-box.jsonc"
 
 # Validate templates exist
-for f in "$XRAY_SERVER_TEMPLATE" "$HY2_SERVER_TEMPLATE" "$MIHOMO_CLIENT_TEMPLATE" "$SINGBOX_CLIENT_TEMPLATE"; do
+for f in "$SINGBOX_SERVER_TEMPLATE" "$MIHOMO_CLIENT_TEMPLATE" "$SINGBOX_CLIENT_TEMPLATE"; do
     if [[ ! -f "$f" ]]; then
         echo "Error: Cannot find template file $f" >&2
         exit 1
@@ -46,101 +49,132 @@ if [[ ! -f "$SECRETS_DIR/secrets.nix" ]]; then
     exit 1
 fi
 
-# --- Generate Xray credentials ---
-echo "Generating Xray UUID..." >&2
-VLESS_UUID=$(nix run nixpkgs#xray -- uuid)
+sing-box() {
+    nix run nixpkgs#sing-box -- "$@"
+}
 
-echo "Generating Xray X25519 keys..." >&2
-X25519_OUT=$(nix run nixpkgs#xray -- x25519)
+openssl() {
+    nix run nixpkgs#openssl -- "$@"
+}
 
-VLESS_PRIVATEKEY=$(printf '%s\n' "$X25519_OUT" | sed -nE 's/^(PrivateKey|Private key):[[:space:]]*//p' | head -n 1)
-VLESS_PUBLICKEY=$(printf '%s\n' "$X25519_OUT" | sed -nE 's/^(PublicKey|Public key|Password):[[:space:]]*//p' | head -n 1)
+# --- Generate VLESS Reality credentials ---
+echo "Using TLS/Reality server name: $TLS_SERVER_NAME" >&2
+echo "Generating VLESS UUID..." >&2
+VLESS_UUID=$(sing-box generate uuid)
+
+echo "Generating VLESS Reality keypair..." >&2
+REALITY_OUT=$(sing-box generate reality-keypair)
+
+VLESS_PRIVATEKEY=$(printf '%s\n' "$REALITY_OUT" | sed -nE 's/^(PrivateKey|Private key):[[:space:]]*//p' | head -n 1)
+VLESS_PUBLICKEY=$(printf '%s\n' "$REALITY_OUT" | sed -nE 's/^(PublicKey|Public key|Password):[[:space:]]*//p' | head -n 1)
 
 if [[ -z "$VLESS_PRIVATEKEY" || -z "$VLESS_PUBLICKEY" ]]; then
-    echo "Error: Failed to extract X25519 keys from xray output:" >&2
-    echo "$X25519_OUT" >&2
+    echo "Error: Failed to extract Reality keys from sing-box output:" >&2
+    echo "$REALITY_OUT" >&2
     exit 1
 fi
 
 # --- Generate Hysteria2 credentials ---
 echo "Generating Hysteria2 password..." >&2
-HY2_PASSWORD=$(nix run nixpkgs#openssl -- rand -base64 32)
+HY2_PASSWORD=$(openssl rand -base64 32)
+
+# --- Generate TUIC credentials ---
+echo "Generating TUIC UUID and password..." >&2
+TUIC_UUID=$(sing-box generate uuid)
+TUIC_PASSWORD=$(openssl rand -base64 32)
 
 echo "Generating self-signed TLS certificate for Hysteria2..." >&2
 TMP_CERT=$(mktemp)
 TMP_KEY=$(mktemp)
-nix run nixpkgs#openssl -- req -x509 -nodes -newkey ec:<(nix run nixpkgs#openssl -- ecparam -name prime256v1) \
+openssl req -x509 -nodes -newkey ec:<(openssl ecparam -name prime256v1) \
     -keyout "$TMP_KEY" -out "$TMP_CERT" -days 3650 \
-    -subj "/CN=www.bing.com" 2>/dev/null
+    -subj "/CN=$TLS_SERVER_NAME" 2>/dev/null
 
 # Get certificate SHA256 fingerprint for mihomo client (hex over DER)
 # and sing-box client (base64 over the public key DER, per sing-box
 # certificate_public_key_sha256 docs).
-FINGERPRINT=$(nix run nixpkgs#openssl -- x509 -noout -fingerprint -sha256 -in "$TMP_CERT" |
+FINGERPRINT=$(openssl x509 -noout -fingerprint -sha256 -in "$TMP_CERT" |
     sed 's/.*=//; s/://g; y/ABCDEF/abcdef/')
-FINGERPRINT_PUBKEY_B64=$(nix run nixpkgs#openssl -- x509 -noout -pubkey -in "$TMP_CERT" | nix run nixpkgs#openssl -- pkey -pubin -outform der | nix run nixpkgs#openssl -- dgst -sha256 -binary | nix run nixpkgs#coreutils -- base64 -w0)
+FINGERPRINT_PUBKEY_B64=$(openssl x509 -noout -pubkey -in "$TMP_CERT" |
+    openssl pkey -pubin -outform der |
+    openssl dgst -sha256 -binary |
+    openssl base64 -A)
 
 # --- Fill templates (without modifying originals) ---
 echo "Filling data into templates..." >&2
 
-TMP_XRAY_SERVER=$(mktemp)
-TMP_HY2_SERVER=$(mktemp)
+TMP_SINGBOX_SERVER=$(mktemp)
+TMP_SINGBOX_SERVER_CHECK=$(mktemp)
 TMP_MIHOMO_CLIENT=$(mktemp)
 TMP_SINGBOX_CLIENT=$(mktemp)
-trap 'rm -f "$TMP_XRAY_SERVER" "$TMP_HY2_SERVER" "$TMP_MIHOMO_CLIENT" "$TMP_SINGBOX_CLIENT" "${TMP_CERT:-}" "${TMP_KEY:-}"' EXIT
+trap 'rm -f "$TMP_SINGBOX_SERVER" "$TMP_SINGBOX_SERVER_CHECK" "$TMP_MIHOMO_CLIENT" "$TMP_SINGBOX_CLIENT" "${TMP_CERT:-}" "${TMP_KEY:-}"' EXIT
 
-# Xray server config
-sed -e "s|VLESS_UUID|$VLESS_UUID|" \
-    -e "s|VLESS_PRIVATEKEY|$VLESS_PRIVATEKEY|" \
-    "$XRAY_SERVER_TEMPLATE" >"$TMP_XRAY_SERVER"
-
-# Hysteria2 server config
+# Sing-box server config. Comments are stripped so the encrypted file is
+# plain JSON and can be validated with `sing-box check`.
 sed -e "s|HY2_PASSWORD|$HY2_PASSWORD|" \
-    "$HY2_SERVER_TEMPLATE" >"$TMP_HY2_SERVER"
+    -e "s|TUIC_PASSWORD|$TUIC_PASSWORD|" \
+    -e "s|TUIC_UUID|$TUIC_UUID|" \
+    -e "s|VLESS_UUID|$VLESS_UUID|" \
+    -e "s|VLESS_PRIVATEKEY|$VLESS_PRIVATEKEY|" \
+    -e "s|TLS_SERVER_NAME|$TLS_SERVER_NAME|" \
+    "$SINGBOX_SERVER_TEMPLATE" | grep -v '^[[:space:]]*//' >"$TMP_SINGBOX_SERVER"
+
+# Validate against the temporary certificate paths. The encrypted config keeps
+# the /root paths used on the server.
+sed -e "s|/root/.config/sing-box/server.crt|$TMP_CERT|" \
+    -e "s|/root/.config/sing-box/server.key|$TMP_KEY|" \
+    "$TMP_SINGBOX_SERVER" >"$TMP_SINGBOX_SERVER_CHECK"
+sing-box check -c "$TMP_SINGBOX_SERVER_CHECK"
 
 # Mihomo client config. SERVER_IP_OR_DOMAIN is intentionally left for vultr/oracle.
 sed -e "s|HY2_PASSWORD|$HY2_PASSWORD|" \
+    -e "s|TUIC_PASSWORD|$TUIC_PASSWORD|" \
+    -e "s|TUIC_UUID|$TUIC_UUID|" \
     -e "s|FINGERPRINT|$FINGERPRINT|" \
     -e "s|VLESS_UUID|$VLESS_UUID|" \
     -e "s|VLESS_PUBLIC_KEY|$VLESS_PUBLICKEY|" \
+    -e "s|TLS_SERVER_NAME|$TLS_SERVER_NAME|" \
     "$MIHOMO_CLIENT_TEMPLATE" >"$TMP_MIHOMO_CLIENT"
 
 # Sing-box client config. Password goes in plain (no URL encoding);
 # the cert pin uses the base64 public-key SHA256.
 sed -e "s|HY2_PASSWORD|$HY2_PASSWORD|" \
+    -e "s|TUIC_PASSWORD|$TUIC_PASSWORD|" \
+    -e "s|TUIC_UUID|$TUIC_UUID|" \
     -e "s|FINGERPRINT_PUBKEY_B64|$FINGERPRINT_PUBKEY_B64|" \
     -e "s|VLESS_UUID|$VLESS_UUID|" \
     -e "s|VLESS_PUBLIC_KEY|$VLESS_PUBLICKEY|" \
+    -e "s|TLS_SERVER_NAME|$TLS_SERVER_NAME|" \
     "$SINGBOX_CLIENT_TEMPLATE" | grep -v '^[[:space:]]*//' >"$TMP_SINGBOX_CLIENT"
+
+# The client template uses sing-box 1.14 fields, so do not validate it with
+# the stable sing-box that gen.sh uses for the server config.
 
 # --- Encrypt with agenix ---
 cd "$SECRETS_DIR"
 
-echo "Encrypting xray-server.age..." >&2
-rm -f xray-server.age
-EDITOR="cp $TMP_XRAY_SERVER" nix run github:ryantm/agenix -- -e xray-server.age >&2
+echo "Encrypting sing-box-server.age..." >&2
+rm -f sing-box-server.age
+nix run github:ryantm/agenix -- -e sing-box-server.age <"$TMP_SINGBOX_SERVER" >&2
 
-echo "Encrypting hysteria-server.age..." >&2
-rm -f hysteria-server.age
-EDITOR="cp $TMP_HY2_SERVER" nix run github:ryantm/agenix -- -e hysteria-server.age >&2
+echo "Encrypting sing-box-cert.age..." >&2
+rm -f sing-box-cert.age
+nix run github:ryantm/agenix -- -e sing-box-cert.age <"$TMP_CERT" >&2
 
-echo "Encrypting hysteria-server-cert.age..." >&2
-rm -f hysteria-server-cert.age
-EDITOR="cp $TMP_CERT" nix run github:ryantm/agenix -- -e hysteria-server-cert.age >&2
-
-echo "Encrypting hysteria-server-key.age..." >&2
-rm -f hysteria-server-key.age
-EDITOR="cp $TMP_KEY" nix run github:ryantm/agenix -- -e hysteria-server-key.age >&2
+echo "Encrypting sing-box-key.age..." >&2
+rm -f sing-box-key.age
+nix run github:ryantm/agenix -- -e sing-box-key.age <"$TMP_KEY" >&2
 
 echo "" >&2
 echo "=============================================" >&2
 echo "All server configs generated and encrypted:" >&2
-echo "  1. $SECRETS_DIR/xray-server.age" >&2
-echo "  2. $SECRETS_DIR/hysteria-server.age" >&2
-echo "  3. $SECRETS_DIR/hysteria-server-cert.age" >&2
-echo "  4. $SECRETS_DIR/hysteria-server-key.age" >&2
+echo "  1. $SECRETS_DIR/sing-box-server.age" >&2
+echo "  2. $SECRETS_DIR/sing-box-cert.age" >&2
+echo "  3. $SECRETS_DIR/sing-box-key.age" >&2
 echo "=============================================" >&2
 echo "" >&2
+echo "${RED}These commands rotate every proxy credential.${RESET}" >&2
+echo "${RED}Update the client with the config printed below.${RESET}" >&2
 
 echo "${GREEN}========== MIHOMO CONFIG START ==========${RESET}"
 cat "$TMP_MIHOMO_CLIENT"

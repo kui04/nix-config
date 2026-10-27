@@ -80,10 +80,14 @@
   ],
   "outbounds": [
     {
+      // Manual selector: TUIC is the default. Change the default or use the
+      // API/dashboard to force another path. A switch interrupts existing
+      // connections so that all traffic uses the selected path.
       "type": "selector",
       "tag": "proxy",
-      "outbounds": ["vless-reality-vision", "hysteria2"],
-      "default": "vless-reality-vision"
+      "outbounds": ["tuic", "hysteria2", "vless-reality-vision"],
+      "default": "tuic",
+      "interrupt_exist_connections": true
     },
     {
       "type": "vless",
@@ -95,7 +99,7 @@
       "packet_encoding": "xudp",
       "tls": {
         "enabled": true,
-        "server_name": "www.bing.com",
+        "server_name": "TLS_SERVER_NAME",
         "utls": {
           "enabled": true,
           "fingerprint": "chrome"
@@ -118,7 +122,25 @@
       "down_mbps": 1000,
       "tls": {
         "enabled": true,
-        "server_name": "www.bing.com",
+        "server_name": "TLS_SERVER_NAME",
+        "alpn": ["h3"],
+        "certificate_public_key_sha256": ["FINGERPRINT_PUBKEY_B64"]
+      }
+    },
+    {
+      "type": "tuic",
+      "tag": "tuic",
+      "server": "SERVER_IP_OR_DOMAIN",
+      "server_port": 8443,
+      "uuid": "TUIC_UUID",
+      "password": "TUIC_PASSWORD",
+      "congestion_control": "bbr",
+      "udp_relay_mode": "native",
+      "zero_rtt_handshake": false,
+      "heartbeat": "10s",
+      "tls": {
+        "enabled": true,
+        "server_name": "TLS_SERVER_NAME",
         "alpn": ["h3"],
         "certificate_public_key_sha256": ["FINGERPRINT_PUBKEY_B64"]
       }
@@ -282,7 +304,8 @@
   ],
   "experimental": {
     "cache_file": {
-      "enabled": true
+      "enabled": true,
+      "cache_id": "fkgfw-la-v1"
     }
   }
 }

@@ -21,7 +21,7 @@ global-client-fingerprint: chrome
 find-process-mode: strict
 
 profile:
-  store-selected: true
+  store-selected: false
   store-fake-ip: true
 
 dns:
@@ -58,13 +58,26 @@ dns:
       - https://dns.alidns.com/dns-query
 
 proxies:
+  - name: "tuic"
+    type: tuic
+    server: SERVER_IP_OR_DOMAIN
+    port: 8443
+    uuid: TUIC_UUID
+    password: "TUIC_PASSWORD"
+    congestion-controller: bbr
+    udp-relay-mode: native
+    sni: TLS_SERVER_NAME
+    alpn: ["h3"]
+    skip-cert-verify: false
+    fingerprint: FINGERPRINT
+
   - name: "hysteria2"
     type: hysteria2
     server: SERVER_IP_OR_DOMAIN
     port: 443
     ports: 20000-50000
     password: "HY2_PASSWORD"
-    sni: www.bing.com
+    sni: TLS_SERVER_NAME
     skip-cert-verify: false
     fingerprint: FINGERPRINT
     fast-open: true
@@ -78,7 +91,7 @@ proxies:
     udp: true
     tls: true
     flow: xtls-rprx-vision
-    servername: www.bing.com
+    servername: TLS_SERVER_NAME
     client-fingerprint: chrome
     packet-encoding: xudp
     skip-cert-verify: true
@@ -90,6 +103,7 @@ proxy-groups:
   - name: "Proxy"
     type: select
     proxies:
+      - tuic
       - vless-reality-vision
       - hysteria2
       - DIRECT
