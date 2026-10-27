@@ -51,8 +51,7 @@
         "server": "alidns"
       }
     ],
-    "final": "dns-proxy",
-    "strategy": "prefer_ipv4"
+    "final": "dns-proxy"
   },
   "inbounds": [
     {
