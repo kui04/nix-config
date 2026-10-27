@@ -13,6 +13,7 @@ in
   imports = [
     ../.shared/flatpak.nix
     ../.shared/fcitx5.nix
+    ../.shared/foot.nix
     ../.shared/niri.nix
     ../.shared/stylix.nix
     ../.shared/agents

@@ -358,9 +358,19 @@ layer-rule {
     geometry-corner-radius 12
 }
 
+// foot snaps its size to whole cells while it believes it is floating, and niri
+// only sends the tiled state by default with prefer-no-csd
+window-rule {
+    match app-id="foot"
+    match app-id="footclient"
+
+    tiled-state true
+}
+
 // Blur effect.
 window-rule {
-    match app-id="com.mitchellh.ghostty"
+    match app-id="foot"
+    match app-id="footclient"
     match app-id="code"
     match app-id="QQ"
 
@@ -414,7 +424,7 @@ binds {
     Mod+Shift+Slash { show-hotkey-overlay; }
 
     // Suggested binds for running programs: terminal, app launcher, screen locker.
-    Mod+T hotkey-overlay-title="Open a Terminal: ghostty" { spawn "ghostty"; }
+    Mod+T hotkey-overlay-title="Open a Terminal: foot" { spawn "foot"; }
     Mod+D hotkey-overlay-title="Run an Application: wofi" { spawn "flock" "-n" "/tmp/wofi.lock" "wofi" "--show" "drun"; }
     Super+L hotkey-overlay-title="Lock the Screen: swaylock" { spawn "swaylock"; }
 

@@ -11,7 +11,7 @@
   programs.niri.useNautilus = true;
   programs.nautilus-open-any-terminal = {
     enable = true;
-    terminal = "ghostty";
+    terminal = "foot";
   };
   # nautilus trash and mounts backend
   services.gvfs.enable = true;
@@ -28,7 +28,6 @@
   environment.systemPackages = with pkgs; [
     exfatprogs
     file-roller # gnome archive manager
-    ghostty # terminal emulator
     gparted # partition editor
     nautilus
     ntfs3g
