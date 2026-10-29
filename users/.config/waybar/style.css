@@ -1,5 +1,4 @@
 /* color scheme https://github.com/tinted-theming/schemes/blob/spec-0.11/base16/material-darker.yaml */
-/* font-size 13px */
 @define-color base00 #212121;
 @define-color base01 #303030;
 @define-color base02 #353535;
@@ -21,9 +20,10 @@
     border: none;
     border-radius: 0;
     font-family: "Adwaita Sans", "Noto Sans", sans-serif;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
-    transition: color 0.3s ease;
+    transition: color 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+                background-color 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     font-feature-settings: "tnum";
 }
 
@@ -79,6 +79,7 @@ window#waybar {
     padding: 0 8px;
     border-radius: 12px;
     margin: 3px 0 2px 3px;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 #memory,
@@ -145,6 +146,7 @@ window#waybar {
     padding: 4px 0;
     border-radius: 12px;
     margin: 3px 0 2px 0;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 #workspaces button {
@@ -152,7 +154,7 @@ window#waybar {
     color: @base04;
     background: transparent;
     border-radius: 12px;
-    transition: none;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 #workspaces button:hover {
@@ -178,6 +180,7 @@ window#waybar {
     padding: 0 8px;
     border-radius: 12px;
     margin: 3px 3px 2px 0;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 #backlight,
@@ -227,15 +230,17 @@ window#waybar {
 /* tooltip start ----------------------------------------------------------- */
 tooltip {
     background: rgba(48, 48, 48, 0.99);
-    /* @base01 with alpha */
     color: @base05;
 
     border-radius: 12px;
     border: 1px solid @base03;
+    padding: 6px 10px;
+    margin: 0 4px;
+    transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 tooltip label {
-    font-family: "Noto Sans", sans-serif;
+    font-family: "Sarasa Mono SC", "Noto Sans Mono CJK SC", monospace;
 }
 
 /* tooltip end ------------------------------------------------------------- */
@@ -267,7 +272,6 @@ menuitem {
 }
 
 menuitem label {
-    font-size: 13px;
     padding: 4px 8px;
     border-radius: 8px;
 }

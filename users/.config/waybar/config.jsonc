@@ -128,7 +128,15 @@
     },
     "clock": {
         "timezone": "Asia/Shanghai",
-        "tooltip-format": "<big>{:%Y %B}</big>\n<tt><small>{calendar}</small></tt>",
+        "tooltip-format": "{calendar}",
+        "calendar": {
+            "mode": "month",
+            "format": {
+                "months": "<span color='#82AAFF'><b>{}</b></span>",
+                "weekdays": "<span color='#FFCB6B'><b>{}</b></span>",
+                "today": "<span color='#F07178'><b><u>{}</u></b></span>"
+            }
+        },
         "format-alt": "{:%Y-%m-%d}"
     },
     "custom/power": {
