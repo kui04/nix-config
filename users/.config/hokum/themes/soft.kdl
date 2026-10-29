@@ -1,0 +1,17 @@
+// Soft: rounded cards with the app icon, hairline border, and soft shadow.
+name "Soft"
+
+tokens {
+    width 360
+    radius 16
+    badge-radius 7
+    padding 12
+    gap 6
+    spacing 4
+    font "Sarasa UI SC"
+    font-size 13
+    border 1 "border"
+    shadow "soft"
+    mark "icon"
+}
+

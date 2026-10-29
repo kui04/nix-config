@@ -27,5 +27,5 @@
   xdg.configFile."swayidle/".source = ../.config/swayidle;
   xdg.configFile."waybar/".source = ../.config/waybar;
   xdg.configFile."wofi/".source = ../.config/wofi;
-  xdg.configFile."mako/".source = ../.config/mako;
+  xdg.configFile."hokum/".source = ../.config/hokum;
 }

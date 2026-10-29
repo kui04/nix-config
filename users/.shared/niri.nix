@@ -6,7 +6,7 @@
   # packages for niri desktop environment
   home.packages = with pkgs; [
     wofi # app launcher
-    mako # notification
+    hokum # notification
     libnotify # library that sends desktop notifications to a notification daemon
     gnome-text-editor # text editor
     loupe # image viewer

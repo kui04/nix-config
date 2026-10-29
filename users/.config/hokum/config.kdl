@@ -1,0 +1,12 @@
+theme "soft"
+
+behaviour {
+    position "top-right"
+    stay 6
+    show-at-most 5
+    pause-on-hover #true
+    do-not-disturb #false
+    appearance "system"
+    check-for-updates #false
+}
+

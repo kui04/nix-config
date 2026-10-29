@@ -286,7 +286,7 @@ layout {
 // which may be more convenient to use.
 // See the binds section below for more spawn examples.
 
-spawn-at-startup "mako"
+spawn-at-startup "hokum" "service"
 spawn-at-startup "/home/kui04/.config/waybar/cpu_temp.sh"
 spawn-at-startup "waybar"
 spawn-at-startup "awww-daemon" 
