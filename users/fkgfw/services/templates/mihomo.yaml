@@ -124,11 +124,8 @@ rules:
   - GEOSITE,private,DIRECT
   - GEOIP,private,DIRECT,no-resolve
 
-  # 在国内有接入点的服务 CDN 直连,不消耗服务器流量;
-  # 带 @cn 属性的规则必须放在 GEOSITE,geolocation-!cn 之前才会生效
-  - GEOSITE,category-games@cn,DIRECT
-  - GEOSITE,apple-cn,DIRECT
-  - GEOSITE,google-play@cn,DIRECT
+  # 国外域名一律走代理,不为省流量按 CDN 直连:
+  # google-play@cn 含 redirector.c.play.google.com(Play 商店下载)。
 
   # Google 系全部走代理,必须位于 GEOSITE,cn 之前 ——
   # geosite:cn 含有 dl.google.com、clientservices.googleapis.com 等条目,

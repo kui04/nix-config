@@ -74,14 +74,6 @@
         "action": "route",
         "server": "dns-cn"
       },
-      // Mirror the route order below: a name must resolve on the same side it
-      // connects from. Otherwise a proxy-routed name gets a domestic CDN
-      // address the VPS cannot reach, as dl.google.com did.
-      {
-        "rule_set": ["geosite-apple", "geosite-category-games@cn", "geosite-google-play@cn"],
-        "action": "route",
-        "server": "dns-cn"
-      },
       {
         "rule_set": ["geosite-google", "geosite-geolocation-!cn"],
         "action": "route",
@@ -220,24 +212,6 @@
       },
       {
         "type": "remote",
-        "tag": "geosite-apple@cn",
-        "format": "binary",
-        "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-apple@cn.srs"
-      },
-      {
-        "type": "remote",
-        "tag": "geosite-apple",
-        "format": "binary",
-        "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-apple.srs"
-      },
-      {
-        "type": "remote",
-        "tag": "geosite-google-play@cn",
-        "format": "binary",
-        "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-google-play@cn.srs"
-      },
-      {
-        "type": "remote",
         "tag": "geosite-google",
         "format": "binary",
         "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-google.srs"
@@ -247,12 +221,6 @@
         "tag": "geosite-geolocation-!cn",
         "format": "binary",
         "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-geolocation-!cn.srs"
-      },
-      {
-        "type": "remote",
-        "tag": "geosite-category-games@cn",
-        "format": "binary",
-        "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-category-games@cn.srs"
       },
       {
         "type": "remote",
@@ -293,19 +261,14 @@
         "action": "route",
         "outbound": "direct"
       },
-      // same order as the mihomo template: ads, private, CN CDNs,
-      // google, off-CN, CN, then GEOIP CN.
+      // same order as the mihomo template: ads, private, google,
+      // off-CN, CN, then GEOIP CN.
       {
         "rule_set": ["geosite-category-ads-all"],
         "action": "reject"
       },
       {
         "rule_set": ["geosite-private"],
-        "action": "route",
-        "outbound": "direct"
-      },
-      {
-        "rule_set": ["geosite-category-games@cn", "geosite-apple@cn", "geosite-apple", "geosite-google-play@cn"],
         "action": "route",
         "outbound": "direct"
       },
