@@ -37,6 +37,9 @@
     username
   ];
 
+  # auto optimize the store to reduce fragmentation and reclaim space
+  nix.settings.auto-optimise-store = true;
+
   # allow unfree packages
   nixpkgs.config.allowUnfree = true;
   # overlays
