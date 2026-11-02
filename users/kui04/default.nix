@@ -46,7 +46,7 @@ in
       unstable.zed-editor
       unstable.helix
       # from its own flake
-      inputs.boo.packages.${stdenv.hostPlatform.system}.default
+      inputs.rmux.packages.${stdenv.hostPlatform.system}.default
     ];
   };
 

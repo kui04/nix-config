@@ -27,8 +27,9 @@
     # ai coding agents and development tools
     llm-agents.url = "github:numtide/llm-agents.nix";
 
-    # agent-friendly terminal multiplexer
-    boo.url = "github:coder/boo";
+    # tmux-compatible terminal multiplexer
+    rmux.url = "github:Helvesec/rmux";
+    rmux.inputs.nixpkgs.follows = "nixpkgs-unstable";
 
     # run unpatched dynamic binaries on NixOS
     nix-ld.url = "github:Mic92/nix-ld";
