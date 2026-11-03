@@ -10,6 +10,6 @@
     };
   };
 
-  # stylix supplies the palette, the font above stays ours
-  stylix.targets.foot.fonts.enable = false;
+  # stylix must not touch foot's appearance, so the palette is foot's own default
+  stylix.targets.foot.enable = false;
 }
