@@ -3,7 +3,6 @@
     "npm:pi-ask-user",
     "npm:pi-permission-system",
     "npm:pi-zentui",
-    "git:github.com/elpapi42/pi-observational-memory",
     "git:github.com/fgrehm/pi-ollama-cloud",
     "git:github.com/kui04/pi-ast-edit@dev",
     "git:github.com/patlux/pi-commandcode-provider"

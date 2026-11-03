@@ -1,57 +1,23 @@
 {
   "mcpServers": {
-    "chrome-devtools": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "chrome-devtools-mcp@latest",
-        "--browser-url=http://127.0.0.1:9222"
-      ]
-    },
     "codegraph": {
       "command": "codegraph",
       "args": ["serve", "--mcp"]
     },
     "context7": {
       "url": "https://mcp.context7.com/mcp",
-      "headers": { "CONTEXT7_API_KEY": "${CONTEXT7_API_KEY}" },
-      "exposure": "direct"
-    },
-    "devenv": {
-      "command": "devenv",
-      "args": ["mcp"]
-    },
-    "fetch": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "mcp/fetch"],
-      "exposure": "direct"
+      "headers": {
+        "CONTEXT7_API_KEY": "${CONTEXT7_API_KEY}"
+      }
     },
     "github": {
       "url": "https://api.githubcopilot.com/mcp/",
-      "headers": { "Authorization": "Bearer ${GITHUB_PAT}" },
-      "exposure": "codemode",
-      "toolExposure": {
-        "search_issues": "direct",
-        "search_code": "direct",
-        "search_repositories": "direct",
-        "issue_read": "direct",
-        "pull_request_read": "direct",
-        "get_file_contents": "direct",
-        "list_issues": "direct",
-        "list_pull_requests": "direct"
+      "headers": {
+        "Authorization": "Bearer ${GITHUB_PAT}"
       }
-    },
-    "playwright": {
-      "command": "npx",
-      "args": ["@playwright/mcp@latest", "--isolated", "--browser", "chromium"]
     },
     "tavily": {
-      "url": "https://mcp.tavily.com/mcp/?tavilyApiKey=${TAVILY_API_KEY}",
-      "exposure": "codemode",
-      "toolExposure": {
-        "tavily_search": "direct",
-        "tavily_extract": "direct"
-      }
+      "url": "https://mcp.tavily.com/mcp/?tavilyApiKey=${TAVILY_API_KEY}"
     }
   }
 }
