@@ -1,0 +1,1125 @@
+#!/usr/bin/env bash
+# Manage long-running agent work as isolated threads in zellij tabs.
+#
+# Public interface:
+#   thread init [<session-name>]
+#   thread spawn [-s <session>] [--persistent] [--wait <regex>] [--cwd <dir>] <name> -- <cmd...>
+#   thread join [-s <session>] [--allow-over-10m] <name> [<seconds>]
+#   thread inspect [-s <session>] <name>
+#   thread send [-s <session>] [--wait-marker <shell|python>] [--raw] <name> <text>
+#   thread read [-s <session>] [--ansi] [--keep] <name>
+#   thread close [-s <session>] <name>
+#   thread board [-s <session>]
+#   thread sweep [-s <session>] [--kill-running] [--keep-session]
+#   thread help | usage [<subcommand>]
+#
+# Input limits:
+#   - Session names and thread names must match ^[A-Za-z0-9._-]+$ (1 to 64 characters).
+#   - Thread name "agent" is reserved for the control pane.
+#   - A session can hold at most 8 active agent-created threads at one time.
+#   - Wait ceiling per join call is between 1 and 180 seconds.
+#
+# Error conditions (non-zero exit codes):
+#   - 1: Invalid arguments, missing zellij binary, or failed zellij action.
+#   - 2: Policy violation (cap of 8 threads reached, join called before inspect after expiry,
+#        reserved name "agent" used for spawn or close, or join called on a persistent thread).
+#        (Closing an untracked tab is exit 1: it is refused as an invalid argument.)
+#   - 3: Action requires user decision (join total wait >= 600s, or sweep found running threads).
+#
+# Safety rules:
+#   - Never call kill-all-sessions, delete-all-sessions, attach (without -b or PTY helper), or subscribe.
+#   - Always pass --no-focus when creating tabs or panes so attached human clients do not lose focus.
+#   - Only close tabs recorded as created by this tool in the session state directory.
+
+set -euo pipefail
+
+MAX_THREADS=8
+MAX_WAIT_SECONDS=180
+PROMPT_USER_WAIT_SECONDS=600
+STATE_ROOT="${XDG_RUNTIME_DIR:-/tmp}/zellij-thread-${UID:-0}"
+
+die() {
+  echo "ERROR: $*" >&2
+  exit 1
+}
+
+policy_error() {
+  echo "POLICY_ERROR: $*" >&2
+  exit 2
+}
+
+user_decision_required() {
+  echo "USER_DECISION_REQUIRED: $*" >&2
+  exit 3
+}
+
+require_tools() {
+  command -v zellij >/dev/null 2>&1 || die "zellij is not installed or not in PATH."
+}
+
+validate_identifier() {
+  local value="$1"
+  local kind="$2"
+  if [[ -z "$value" ]] || [[ "${#value}" -gt 64 ]] || [[ ! "$value" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    die "Invalid $kind '$value'. Use 1-64 characters from [A-Za-z0-9._-]."
+  fi
+}
+
+is_windows_no_script() {
+  # Native Windows / Git Bash lacks util-linux `script` for a throwaway PTY client.
+  if ! command -v script >/dev/null 2>&1; then
+    case "$(uname -s 2>/dev/null || echo unknown)" in
+      MINGW*|MSYS*|CYGWIN*|Windows_NT) return 0 ;;
+    esac
+  fi
+  return 1
+}
+
+cwd_key() {
+  printf '%s' "$PWD" | sha256sum | cut -c1-12
+}
+
+session_dir_for() {
+  local session="$1"
+  printf '%s/sessions/%s' "$STATE_ROOT" "$session"
+}
+
+thread_dir_for() {
+  local session="$1"
+  local name="$2"
+  printf '%s/sessions/%s/threads/%s' "$STATE_ROOT" "$session" "$name"
+}
+
+resolve_session() {
+  local explicit_session="${1:-}"
+  if [[ -n "$explicit_session" ]]; then
+    validate_identifier "$explicit_session" "session name"
+    printf '%s' "$explicit_session"
+    return 0
+  fi
+  if [[ -n "${ZELLIJ_SESSION_NAME:-}" ]]; then
+    printf '%s' "$ZELLIJ_SESSION_NAME"
+    return 0
+  fi
+  local key_file="$STATE_ROOT/by-cwd/$(cwd_key)"
+  if [[ -f "$key_file" ]]; then
+    head -n 1 "$key_file"
+    return 0
+  fi
+  die "No active session found for '$PWD'. Run 'thread init' first or pass '-s <session>'."
+}
+
+session_exists() {
+  local session="$1"
+  zellij list-sessions -s 2>/dev/null | grep -qx "$session"
+}
+
+# Parse `zellij action list-panes -a -j` without requiring jq or python3 in PATH.
+# Output columns (tab-separated) for non-plugin panes:
+#   1:id  2:tab_id  3:tab_name  4:exited  5:exit_status  6:cursor  7:cols  8:title
+list_terminal_panes_tsv() {
+  local session="$1"
+  zellij --session "$session" action list-panes -a -j 2>/dev/null | awk '
+    function unquote(s) {
+      sub(/^[[:space:]]*"[^"]+"[[:space:]]*:[[:space:]]*/, "", s)
+      sub(/,[[:space:]]*$/, "", s)
+      if (s ~ /^".*"$/) {
+        sub(/^"/, "", s)
+        sub(/"$/, "", s)
+      }
+      gsub(/\t/, " ", s)
+      return s
+    }
+    /^  \{$/ {
+      id=""; is_plugin=""; title=""; exited="false"; exit_status="null"
+      tab_id=""; tab_name=""; cols="0"; cursor="null"; in_cursor=0
+      next
+    }
+    in_cursor == 1 {
+      if ($0 ~ /\]/) {
+        in_cursor=0
+        cursor="[" cursor "]"
+      } else {
+        line=$0
+        gsub(/[[:space:],]/, "", line)
+        if (cursor == "") cursor=line
+        else cursor=cursor "," line
+      }
+      next
+    }
+    /^    "id":/ { id=unquote($0); next }
+    /^    "is_plugin":/ { is_plugin=unquote($0); next }
+    /^    "title":/ { title=unquote($0); next }
+    /^    "exited":/ { exited=unquote($0); next }
+    /^    "exit_status":/ { exit_status=unquote($0); next }
+    /^    "pane_content_columns":/ { cols=unquote($0); next }
+    /^    "cursor_coordinates_in_pane": null/ { cursor="null"; next }
+    /^    "cursor_coordinates_in_pane": \[/ { cursor=""; in_cursor=1; next }
+    /^    "tab_id":/ { tab_id=unquote($0); next }
+    /^    "tab_name":/ { tab_name=unquote($0); next }
+    /^  \},?$/ {
+      if (is_plugin == "false" && id != "") {
+        printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", id, tab_id, tab_name, exited, exit_status, cursor, cols, title
+      }
+    }
+  '
+}
+
+# Print the PID $1 and every descendant of it. Needs only `ps -eo pid=,ppid=`, so it also
+# works where `ps --ppid` (GNU-only) is unavailable.
+descendant_pids() {
+  local root="$1"
+  ps -eo pid=,ppid= 2>/dev/null | awk -v root="$root" '
+    { parent[$1] = $2 }
+    END {
+      keep[root] = 1
+      changed = 1
+      while (changed) {
+        changed = 0
+        for (p in parent) {
+          if (!(p in keep) && (parent[p] in keep)) { keep[p] = 1; changed = 1 }
+        }
+      }
+      for (p in keep) print p
+    }'
+}
+
+pane_exists_by_num() {
+  local session="$1"
+  local target_id="$2"
+  list_terminal_panes_tsv "$session" | awk -F'\t' -v p="$target_id" '$1 == p { found=1; exit } END { exit(found ? 0 : 1) }'
+}
+
+active_client_count() {
+  local session="$1"
+  local lines
+  lines=$(zellij --session "$session" action list-clients 2>/dev/null | wc -l || echo 0)
+  if [[ "$lines" -le 1 ]]; then
+    echo 0
+  else
+    echo $((lines - 1))
+  fi
+}
+
+# zellij 0.45 sizes a new tab from attached clients and discards tabs created with no client
+# upon the first attach. Attach a short-lived PTY client only when no client is watching.
+start_throwaway_client() {
+  local session="$1"
+  HELPER_PID=""
+  if is_windows_no_script; then
+    return 0
+  fi
+  if [[ "$(active_client_count "$session")" -eq 0 ]]; then
+    command -v script >/dev/null 2>&1 || die "'script' is required to attach a temporary PTY client outside zellij."
+    script -qfc "stty rows 40 cols 120; zellij attach $session" /dev/null >/dev/null 2>&1 &
+    HELPER_PID=$!
+    local i=0
+    while [[ "$(active_client_count "$session")" -eq 0 ]]; do
+      [[ "$i" -ge 40 ]] && break
+      sleep 0.05
+      i=$((i + 1))
+    done
+  fi
+}
+
+stop_throwaway_client() {
+  # util-linux `script` ignores SIGTERM and leaves a zombie child unless killed with SIGKILL.
+  if [[ -n "${HELPER_PID:-}" ]]; then
+    kill -9 "$HELPER_PID" 2>/dev/null || true
+    wait "$HELPER_PID" 2>/dev/null || true
+    HELPER_PID=""
+  fi
+}
+
+cmd_init() {
+  local target_session="${1:-}"
+  local created_by_agent=0
+
+  if [[ -z "$target_session" ]]; then
+    if [[ -n "${ZELLIJ_SESSION_NAME:-}" ]]; then
+      target_session="$ZELLIJ_SESSION_NAME"
+    else
+      local base
+      base=$(basename "$PWD" | tr -cd 'A-Za-z0-9._-')
+      [[ -z "$base" ]] && base="work"
+      target_session="thread-${base}-$(cwd_key | cut -c1-6)"
+    fi
+  fi
+  validate_identifier "$target_session" "session name"
+
+  local sdir
+  sdir=$(session_dir_for "$target_session")
+  mkdir -p "$sdir/threads" "$STATE_ROOT/by-cwd"
+
+  if [[ -n "${ZELLIJ_SESSION_NAME:-}" ]] && [[ "$target_session" == "$ZELLIJ_SESSION_NAME" ]]; then
+    local target_pane="${ZELLIJ_PANE_ID:-0}"
+    zellij action rename-pane -p "$target_pane" agent 2>/dev/null || true
+  else
+    if ! session_exists "$target_session"; then
+      zellij attach -b -c "$target_session"
+      created_by_agent=1
+      echo "1" > "$sdir/created_by_agent"
+      local i=0
+      until zellij --session "$target_session" action rename-pane -p 0 agent 2>/dev/null; do
+        [[ "$i" -ge 25 ]] && break
+        sleep 0.2
+        i=$((i + 1))
+      done
+    fi
+  fi
+
+  [[ -f "$sdir/created_by_agent" ]] && created_by_agent=1
+  printf '%s\n' "$target_session" > "$STATE_ROOT/by-cwd/$(cwd_key)"
+
+  echo "SESSION=$target_session"
+  echo "CREATED_BY_AGENT=$created_by_agent"
+  if [[ -z "${ZELLIJ_SESSION_NAME:-}" ]] || [[ "$target_session" != "$ZELLIJ_SESSION_NAME" ]]; then
+    echo "ATTACH_HINT=zellij attach $target_session"
+  fi
+}
+
+count_active_agent_threads() {
+  local session="$1"
+  local sdir
+  sdir=$(session_dir_for "$session")
+  [[ -d "$sdir/threads" ]] || { echo 0; return 0; }
+
+  local tsv
+  tsv=$(list_terminal_panes_tsv "$session")
+  local count=0
+  local tdir
+  for tdir in "$sdir/threads"/*; do
+    [[ -d "$tdir" ]] || continue
+    local pane_num
+    pane_num=$(cat "$tdir/pane_num" 2>/dev/null || true)
+    [[ -n "$pane_num" ]] || continue
+    if printf '%s\n' "$tsv" | awk -F'\t' -v p="$pane_num" '$1 == p { found=1; exit } END { exit(found ? 0 : 1) }'; then
+      count=$((count + 1))
+    fi
+  done
+  echo "$count"
+}
+
+cmd_spawn() {
+  local session=""
+  local mode="oneshot"
+  local wait_regex=""
+  local cwd="$PWD"
+  local name=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -s|--session) session="$2"; shift 2 ;;
+      --persistent) mode="persistent"; shift ;;
+      --wait) wait_regex="$2"; shift 2 ;;
+      --cwd) cwd="$2"; shift 2 ;;
+      --) shift; break ;;
+      -*) die "Unknown spawn option '$1'." ;;
+      *)
+        if [[ -z "$name" ]]; then
+          name="$1"
+          shift
+        else
+          break
+        fi
+        ;;
+    esac
+  done
+
+  [[ -n "$name" ]] || die "Usage: thread spawn [-s <session>] [--persistent] [--wait <regex>] <name> -- <cmd...>"
+  [[ "${1:-}" == "--" ]] && shift
+  [[ $# -ge 1 ]] || die "Missing command for thread '$name'."
+
+  validate_identifier "$name" "thread name"
+  [[ "$name" != "agent" ]] || policy_error "Thread name 'agent' is reserved for the agent pane."
+
+  session=$(resolve_session "$session")
+  session_exists "$session" || die "Session '$session' does not exist. Run 'thread init' first."
+
+  local sdir
+  sdir=$(session_dir_for "$session")
+  mkdir -p "$sdir/threads"
+
+  local tdir
+  tdir=$(thread_dir_for "$session" "$name")
+  if [[ -d "$tdir" ]]; then
+    local old_pane
+    old_pane=$(cat "$tdir/pane_num" 2>/dev/null || true)
+    if [[ -n "$old_pane" ]] && pane_exists_by_num "$session" "$old_pane"; then
+      policy_error "Thread '$name' already exists on the board. Read or close it before reusing the name."
+    fi
+    rm -rf "$tdir"
+  fi
+
+  local active_count
+  active_count=$(count_active_agent_threads "$session")
+  if [[ "$active_count" -ge "$MAX_THREADS" ]]; then
+    policy_error "Session '$session' already has $active_count active threads (limit $MAX_THREADS). Collect finished threads first."
+  fi
+
+  mkdir -p "$tdir"
+  printf '%s\n' "$mode" > "$tdir/mode"
+  printf '0\n' > "$tdir/rung"
+  printf '0\n' > "$tdir/elapsed_wait"
+  printf '0\n' > "$tdir/needs_inspect"
+  printf '0\n' > "$tdir/stagnant_inspects"
+
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'cd %q || exit 1\n' "$cwd"
+    if [[ $# -eq 1 ]]; then
+      printf 'bash -c %q\n' "$1"
+    else
+      local arg
+      local first=1
+      for arg in "$@"; do
+        if [[ "$first" -eq 1 ]]; then
+          printf '%q' "$arg"
+          first=0
+        else
+          printf ' %q' "$arg"
+        fi
+      done
+      printf '\n'
+    fi
+  } > "$tdir/cmd.sh"
+  chmod +x "$tdir/cmd.sh"
+
+  if [[ "$mode" == "oneshot" ]]; then
+    cat > "$tdir/runner.sh" <<EOF
+#!/usr/bin/env bash
+echo "\$\$" > "$tdir/pid"
+echo "THREAD_PID:\$\$"
+"$tdir/cmd.sh"
+s=\$?
+echo "THREAD_EXIT:\$s"
+echo "\$s" > "$tdir/status"
+exit "\$s"
+EOF
+  else
+    cat > "$tdir/runner.sh" <<EOF
+#!/usr/bin/env bash
+echo "\$\$" > "$tdir/pid"
+echo "THREAD_PID:\$\$"
+exec "$tdir/cmd.sh"
+EOF
+  fi
+  chmod +x "$tdir/runner.sh"
+
+  local tab_id=""
+  local pane_num=""
+  local use_pane_only=0
+
+  if is_windows_no_script; then
+    use_pane_only=1
+    printf '1\n' > "$tdir/pane_only"
+    local pane_out
+    pane_out=$(zellij --session "$session" action new-pane --no-focus -n "$name" --cwd "$cwd" -- "$tdir/runner.sh")
+    pane_num="${pane_out#terminal_}"
+  else
+    printf '0\n' > "$tdir/pane_only"
+    trap stop_throwaway_client EXIT
+    start_throwaway_client "$session"
+    tab_id=$(zellij --session "$session" action new-tab --no-focus -n "$name" --cwd "$cwd" -- "$tdir/runner.sh" | tr -d '[:space:]')
+    stop_throwaway_client
+    trap - EXIT
+  fi
+
+  # zellij returns 0 even when pane creation fails; verify that the pane appears on the board.
+  local i=0
+  local matched_row=""
+  while [[ "$i" -lt 25 ]]; do
+    local tsv
+    tsv=$(list_terminal_panes_tsv "$session")
+    if [[ "$use_pane_only" -eq 1 ]] && [[ -n "$pane_num" ]]; then
+      matched_row=$(printf '%s\n' "$tsv" | awk -F'\t' -v p="$pane_num" '$1 == p { print; exit }')
+    elif [[ -n "$tab_id" ]] && [[ "$tab_id" =~ ^[0-9]+$ ]]; then
+      matched_row=$(printf '%s\n' "$tsv" | awk -F'\t' -v tid="$tab_id" -v tname="$name" '$2 == tid || $3 == tname { row=$0 } END { if (row != "") print row }')
+    else
+      matched_row=$(printf '%s\n' "$tsv" | awk -F'\t' -v tname="$name" '$3 == tname { row=$0 } END { if (row != "") print row }')
+    fi
+    if [[ -n "$matched_row" ]]; then
+      pane_num=$(printf '%s\n' "$matched_row" | cut -f1)
+      tab_id=$(printf '%s\n' "$matched_row" | cut -f2)
+      break
+    fi
+    sleep 0.1
+    i=$((i + 1))
+  done
+
+  [[ -n "$pane_num" ]] || die "Thread '$name' failed to appear in list-panes after creation."
+  printf '%s\n' "$pane_num" > "$tdir/pane_num"
+  printf 'terminal_%s\n' "$pane_num" > "$tdir/pane_id"
+  printf '%s\n' "$tab_id" > "$tdir/tab_id"
+
+  local ready="not_requested"
+  if [[ -n "$wait_regex" ]]; then
+    ready="timeout"
+    local w=0
+    while [[ "$w" -lt 50 ]]; do
+      if zellij --session "$session" action dump-screen -p "terminal_${pane_num}" 2>/dev/null | grep -Eq "$wait_regex"; then
+        ready="ready"
+        break
+      fi
+      sleep 0.2
+      w=$((w + 1))
+    done
+  fi
+
+  echo "SESSION=$session"
+  echo "THREAD=$name"
+  echo "MODE=$mode"
+  echo "TAB_ID=$tab_id"
+  echo "PANE_ID=terminal_${pane_num}"
+  [[ "$wait_regex" != "" ]] && echo "READINESS=$ready"
+  return 0
+}
+
+ladder_seconds_for_rung() {
+  local rung="$1"
+  case "$rung" in
+    1) echo 10 ;;
+    2) echo 20 ;;
+    3) echo 40 ;;
+    4) echo 80 ;;
+    *) echo 180 ;;
+  esac
+}
+
+cmd_join() {
+  local session=""
+  local allow_over_10m=0
+  local name=""
+  local requested_seconds=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -s|--session) session="$2"; shift 2 ;;
+      --allow-over-10m) allow_over_10m=1; shift ;;
+      -*) die "Unknown join option '$1'." ;;
+      *)
+        if [[ -z "$name" ]]; then
+          name="$1"
+        elif [[ -z "$requested_seconds" ]]; then
+          requested_seconds="$1"
+        else
+          die "Unexpected argument '$1' for join."
+        fi
+        shift
+        ;;
+    esac
+  done
+
+  [[ -n "$name" ]] || die "Usage: thread join [-s <session>] [--allow-over-10m] <name> [<seconds>]"
+  validate_identifier "$name" "thread name"
+
+  session=$(resolve_session "$session")
+  local tdir
+  tdir=$(thread_dir_for "$session" "$name")
+  [[ -d "$tdir" ]] || die "Thread '$name' is not tracked in session '$session'."
+
+  local mode
+  mode=$(cat "$tdir/mode" 2>/dev/null || echo "oneshot")
+  [[ "$mode" == "oneshot" ]] || policy_error "Thread '$name' is persistent and cannot be joined. Use 'thread inspect' or 'thread send'."
+
+  local status_file="$tdir/status"
+  if [[ -f "$status_file" ]]; then
+    local code
+    code=$(head -n 1 "$status_file")
+    echo "STATUS=EXITED"
+    echo "EXIT_CODE=$code"
+    return 0
+  fi
+
+  local needs_inspect
+  needs_inspect=$(cat "$tdir/needs_inspect" 2>/dev/null || echo 0)
+  if [[ "$needs_inspect" -eq 1 ]]; then
+    policy_error "Previous join for '$name' expired. Run 'thread inspect $name' before joining again."
+  fi
+
+  local elapsed_wait
+  elapsed_wait=$(cat "$tdir/elapsed_wait" 2>/dev/null || echo 0)
+  if [[ "$allow_over_10m" -eq 1 ]]; then
+    printf '1\n' > "$tdir/allow_over_10m"
+  fi
+  if [[ "$elapsed_wait" -ge "$PROMPT_USER_WAIT_SECONDS" ]] && [[ ! -f "$tdir/allow_over_10m" ]]; then
+    user_decision_required "Thread '$name' has waited ${elapsed_wait}s (>= 600s). Ask the user once whether to keep waiting or move on; if keeping waiting, pass --allow-over-10m."
+  fi
+
+  local prev_rung
+  prev_rung=$(cat "$tdir/rung" 2>/dev/null || echo 0)
+  local next_rung=$((prev_rung + 1))
+  local rung_seconds
+  rung_seconds=$(ladder_seconds_for_rung "$next_rung")
+
+  local wait_seconds="$rung_seconds"
+  if [[ -n "$requested_seconds" ]]; then
+    [[ "$requested_seconds" =~ ^[0-9]+$ ]] || die "Wait seconds must be a positive integer."
+    if [[ "$next_rung" -eq 1 ]]; then
+      wait_seconds=10
+    else
+      wait_seconds="$requested_seconds"
+      [[ "$wait_seconds" -lt "$rung_seconds" ]] && wait_seconds="$rung_seconds"
+      [[ "$wait_seconds" -gt "$MAX_WAIT_SECONDS" ]] && wait_seconds="$MAX_WAIT_SECONDS"
+    fi
+  fi
+
+  local tries=$((wait_seconds * 5))
+  local i=0
+  while [[ ! -f "$status_file" ]] && [[ "$i" -lt "$tries" ]]; do
+    sleep 0.2
+    i=$((i + 1))
+  done
+
+  local actual_waited=$(( (i + 4) / 5 ))
+  elapsed_wait=$((elapsed_wait + actual_waited))
+  printf '%s\n' "$elapsed_wait" > "$tdir/elapsed_wait"
+  printf '%s\n' "$next_rung" > "$tdir/rung"
+
+  if [[ -f "$status_file" ]]; then
+    printf '0\n' > "$tdir/needs_inspect"
+    local code
+    code=$(head -n 1 "$status_file")
+    echo "STATUS=EXITED"
+    echo "EXIT_CODE=$code"
+    echo "RUNG=$next_rung"
+    echo "TOTAL_WAITED_SECONDS=$elapsed_wait"
+    return 0
+  fi
+
+  printf '1\n' > "$tdir/needs_inspect"
+  echo "STATUS=RUNNING"
+  echo "RUNG=$next_rung"
+  echo "WAITED_SECONDS=$wait_seconds"
+  echo "TOTAL_WAITED_SECONDS=$elapsed_wait"
+  echo "NEXT_ACTION=thread inspect $name"
+}
+
+cmd_inspect() {
+  local session=""
+  local name=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -s|--session) session="$2"; shift 2 ;;
+      -*) die "Unknown inspect option '$1'." ;;
+      *)
+        [[ -z "$name" ]] || die "Unexpected argument '$1' for inspect."
+        name="$1"
+        shift
+        ;;
+    esac
+  done
+
+  [[ -n "$name" ]] || die "Usage: thread inspect [-s <session>] <name>"
+  validate_identifier "$name" "thread name"
+
+  session=$(resolve_session "$session")
+  local tdir
+  tdir=$(thread_dir_for "$session" "$name")
+  [[ -d "$tdir" ]] || die "Thread '$name' is not tracked in session '$session'."
+
+  local pane_num
+  pane_num=$(cat "$tdir/pane_num")
+  local pane_id="terminal_${pane_num}"
+
+  # Unlock subsequent join after inspection.
+  printf '0\n' > "$tdir/needs_inspect"
+
+  local pane_row
+  pane_row=$(list_terminal_panes_tsv "$session" | awk -F'\t' -v p="$pane_num" '$1 == p { print; exit }')
+  [[ -n "$pane_row" ]] || die "Pane '$pane_id' for thread '$name' is no longer on the board."
+
+  local exited
+  exited=$(printf '%s\n' "$pane_row" | cut -f4)
+  local exit_status
+  exit_status=$(printf '%s\n' "$pane_row" | cut -f5)
+  local cursor_coords
+  cursor_coords=$(printf '%s\n' "$pane_row" | cut -f6)
+
+  local current_screen="$tdir/screen.current"
+  zellij --session "$session" action dump-screen -p "$pane_id" -f > "$current_screen" 2>/dev/null || true
+
+  local screen_changed="yes"
+  if [[ -f "$tdir/screen.last" ]] && cmp -s "$current_screen" "$tdir/screen.last"; then
+    screen_changed="no"
+  fi
+  cp "$current_screen" "$tdir/screen.last"
+
+  local tpid=""
+  if [[ -f "$tdir/pid" ]]; then
+    tpid=$(head -n 1 "$tdir/pid" | tr -d '[:space:]')
+  fi
+  if [[ -z "$tpid" ]]; then
+    tpid=$(grep -Eo 'THREAD_PID:[0-9]+' "$current_screen" | head -n 1 | cut -d: -f2 || true)
+  fi
+
+  local ps_output=""
+  local cpu_active="no"
+  if [[ -n "$tpid" ]]; then
+    # Walk the whole tree (runner -> cmd.sh -> bash -c -> cargo -> rustc ...). Looking only at
+    # direct children misses the busy worker and reports a healthy build as idle.
+    local tree_pids
+    tree_pids=$(descendant_pids "$tpid" | paste -sd',' -)
+    if [[ -n "$tree_pids" ]]; then
+      ps_output=$(ps -o pid,stat,%cpu,etime,args -p "$tree_pids" 2>/dev/null || true)
+    fi
+    if [[ -n "$ps_output" ]]; then
+      local awk_active
+      awk_active=$(echo "$ps_output" | awk 'NR>1 && ($3+0 > 0.5 || $2 ~ /R|D/) {print "yes"; exit}')
+      [[ "$awk_active" == "yes" ]] && cpu_active="yes"
+    fi
+  fi
+
+  local stagnant
+  stagnant=$(cat "$tdir/stagnant_inspects" 2>/dev/null || echo 0)
+  if [[ "$screen_changed" == "no" ]] && [[ "$cpu_active" == "no" ]] && [[ "$exited" == "false" ]]; then
+    stagnant=$((stagnant + 1))
+  else
+    stagnant=0
+  fi
+  printf '%s\n' "$stagnant" > "$tdir/stagnant_inspects"
+
+  local hang_candidate="no"
+  [[ "$stagnant" -ge 2 ]] && hang_candidate="yes"
+
+  echo "=== [META] ==="
+  echo "THREAD=$name"
+  echo "PANE_ID=$pane_id"
+  echo "EXITED=$exited"
+  echo "EXIT_STATUS=$exit_status"
+  [[ -f "$tdir/status" ]] && echo "STATUS_FILE_CODE=$(head -n 1 "$tdir/status")"
+  echo "SCREEN_CHANGED=$screen_changed"
+  echo "CPU_ACTIVE=$cpu_active"
+  echo "CURSOR_COORDINATES=$cursor_coords"
+  echo "STAGNANT_INSPECTS=$stagnant"
+  echo "HANG_CANDIDATE=$hang_candidate"
+  echo "=== [PROCESS_TREE] ==="
+  if [[ -n "$ps_output" ]]; then
+    echo "$ps_output"
+  else
+    echo "(no running process tree for PID ${tpid:-unknown})"
+  fi
+  echo "=== [SCREEN_TAIL] ==="
+  tail -n 80 "$current_screen"
+}
+
+cmd_send() {
+  local session=""
+  local marker_mode=""
+  local raw_mode=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -s|--session) session="$2"; shift 2 ;;
+      --wait-marker) marker_mode="$2"; shift 2 ;;
+      --raw) raw_mode=1; shift ;;
+      -*) die "Unknown send option '$1'." ;;
+      *) break ;;
+    esac
+  done
+
+  [[ $# -ge 2 ]] || die "Usage: thread send [-s <session>] [--wait-marker <shell|python>] [--raw] <name> <text>"
+  local name="$1"
+  shift
+  local text="$*"
+  validate_identifier "$name" "thread name"
+  [[ -n "$text" ]] || die "Refusing to send empty text to thread '$name'."
+
+  session=$(resolve_session "$session")
+  local tdir
+  tdir=$(thread_dir_for "$session" "$name")
+  [[ -d "$tdir" ]] || die "Thread '$name' is not tracked in session '$session'."
+  local pane_id
+  pane_id=$(cat "$tdir/pane_id")
+
+  zellij --session "$session" action write-chars -p "$pane_id" "$text"
+  if [[ "$raw_mode" -eq 0 ]]; then
+    zellij --session "$session" action send-keys -p "$pane_id" Enter
+  fi
+
+  if [[ -n "$marker_mode" ]]; then
+    local token="REPLY_$(date +%s)_${RANDOM}"
+    local marker_cmd=""
+    # Build the marker from pieces inside the target interpreter so the echoed command
+    # does not contain the assembled marker string.
+    case "$marker_mode" in
+      shell) marker_cmd="echo \"THREAD_\"\"${token}\"" ;;
+      python) marker_cmd="print('THREAD_'+'${token}')" ;;
+      *) die "Unsupported --wait-marker '$marker_mode'. Use 'shell' or 'python'." ;;
+    esac
+    zellij --session "$session" action write-chars -p "$pane_id" "$marker_cmd"
+    zellij --session "$session" action send-keys -p "$pane_id" Enter
+
+    local i=0
+    local matched=0
+    while [[ "$i" -lt 50 ]]; do
+      if zellij --session "$session" action dump-screen -p "$pane_id" 2>/dev/null | grep -q "THREAD_${token}"; then
+        matched=1
+        break
+      fi
+      sleep 0.2
+      i=$((i + 1))
+    done
+    echo "MARKER_MATCHED=$matched"
+    zellij --session "$session" action dump-screen -p "$pane_id" -f
+  fi
+}
+
+close_tracked_thread() {
+  local session="$1"
+  local name="$2"
+  local tdir
+  tdir=$(thread_dir_for "$session" "$name")
+  [[ -d "$tdir" ]] || die "Thread '$name' is not tracked in session '$session' (refusing to close untracked tab)."
+
+  local pane_only
+  pane_only=$(cat "$tdir/pane_only" 2>/dev/null || echo 0)
+  if [[ "$pane_only" -eq 1 ]]; then
+    local pane_id
+    pane_id=$(cat "$tdir/pane_id")
+    zellij --session "$session" action close-pane -p "$pane_id" 2>/dev/null || true
+  else
+    local tab_id
+    tab_id=$(cat "$tdir/tab_id")
+    zellij --session "$session" action close-tab-by-id "$tab_id" 2>/dev/null || true
+  fi
+  rm -rf "$tdir"
+}
+
+cmd_read() {
+  local session=""
+  local ansi=0
+  local keep=0
+  local name=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -s|--session) session="$2"; shift 2 ;;
+      --ansi) ansi=1; shift ;;
+      --keep) keep=1; shift ;;
+      -*) die "Unknown read option '$1'." ;;
+      *)
+        [[ -z "$name" ]] || die "Unexpected argument '$1' for read."
+        name="$1"
+        shift
+        ;;
+    esac
+  done
+
+  [[ -n "$name" ]] || die "Usage: thread read [-s <session>] [--ansi] [--keep] <name>"
+  validate_identifier "$name" "thread name"
+
+  session=$(resolve_session "$session")
+  local tdir
+  tdir=$(thread_dir_for "$session" "$name")
+  [[ -d "$tdir" ]] || die "Thread '$name' is not tracked in session '$session'."
+
+  local pane_id
+  pane_id=$(cat "$tdir/pane_id")
+  local mode
+  mode=$(cat "$tdir/mode" 2>/dev/null || echo "oneshot")
+
+  local exit_code="RUNNING"
+  if [[ -f "$tdir/status" ]]; then
+    exit_code=$(head -n 1 "$tdir/status")
+  else
+    local pane_num
+    pane_num=$(cat "$tdir/pane_num")
+    local pane_row
+    pane_row=$(list_terminal_panes_tsv "$session" | awk -F'\t' -v p="$pane_num" '$1 == p { print; exit }')
+    if [[ -n "$pane_row" ]]; then
+      local exited
+      exited=$(printf '%s\n' "$pane_row" | cut -f4)
+      local st
+      st=$(printf '%s\n' "$pane_row" | cut -f5)
+      if [[ "$exited" == "true" ]]; then
+        [[ "$st" == "null" ]] && exit_code="0" || exit_code="$st"
+      fi
+    fi
+  fi
+
+  echo "=== [SCREEN] ==="
+  if [[ "$ansi" -eq 1 ]]; then
+    zellij --session "$session" action dump-screen -p "$pane_id" -f -a
+  else
+    zellij --session "$session" action dump-screen -p "$pane_id" -f
+  fi
+  echo "=== [RESULT] ==="
+  echo "THREAD=$name"
+  echo "EXIT_CODE=$exit_code"
+
+  if [[ "$mode" == "oneshot" ]] && [[ "$exit_code" != "RUNNING" ]] && [[ "$keep" -eq 0 ]]; then
+    close_tracked_thread "$session" "$name"
+    echo "CLOSED=1"
+  else
+    echo "CLOSED=0"
+  fi
+}
+
+cmd_close() {
+  local session=""
+  local name=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -s|--session) session="$2"; shift 2 ;;
+      -*) die "Unknown close option '$1'." ;;
+      *)
+        [[ -z "$name" ]] || die "Unexpected argument '$1' for close."
+        name="$1"
+        shift
+        ;;
+    esac
+  done
+
+  [[ -n "$name" ]] || die "Usage: thread close [-s <session>] <name>"
+  validate_identifier "$name" "thread name"
+  [[ "$name" != "agent" ]] || policy_error "Never close the agent pane."
+
+  session=$(resolve_session "$session")
+  close_tracked_thread "$session" "$name"
+  echo "CLOSED_THREAD=$name"
+}
+
+cmd_board() {
+  local session=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -s|--session) session="$2"; shift 2 ;;
+      -*) die "Unknown board option '$1'." ;;
+      *) break ;;
+    esac
+  done
+
+  session=$(resolve_session "$session")
+  printf 'PANE_ID\tTAB_ID\tTAB_NAME\tEXITED\tEXIT_STATUS\tCURSOR\tCOLS\tTITLE\n'
+  list_terminal_panes_tsv "$session" | awk -F'\t' '{
+    printf "terminal_%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", $1, $2, $3, $4, $5, $6, $7, $8
+  }'
+}
+
+cmd_sweep() {
+  local session=""
+  local kill_running=0
+  local keep_session=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -s|--session) session="$2"; shift 2 ;;
+      --kill-running) kill_running=1; shift ;;
+      --keep-session) keep_session=1; shift ;;
+      -*) die "Unknown sweep option '$1'." ;;
+      *) break ;;
+    esac
+  done
+
+  session=$(resolve_session "$session")
+  local sdir
+  sdir=$(session_dir_for "$session")
+
+  if ! session_exists "$session"; then
+    rm -rf "$sdir" "$STATE_ROOT/by-cwd/$(cwd_key)"
+    echo "SWEEP=CLEAN (session already absent)"
+    return 0
+  fi
+
+  local tsv
+  tsv=$(list_terminal_panes_tsv "$session")
+  local running_threads=()
+  local closed_threads=()
+
+  if [[ -d "$sdir/threads" ]]; then
+    local tdir
+    for tdir in "$sdir/threads"/*; do
+      [[ -d "$tdir" ]] || continue
+      local tname
+      tname=$(basename "$tdir")
+      local pane_num
+      pane_num=$(cat "$tdir/pane_num" 2>/dev/null || true)
+      if [[ -z "$pane_num" ]]; then
+        rm -rf "$tdir"
+        continue
+      fi
+      local prow
+      prow=$(printf '%s\n' "$tsv" | awk -F'\t' -v p="$pane_num" '$1 == p { print; exit }')
+      if [[ -z "$prow" ]]; then
+        rm -rf "$tdir"
+        continue
+      fi
+      local exited
+      exited=$(printf '%s\n' "$prow" | cut -f4)
+      if [[ -f "$tdir/status" ]] || [[ "$exited" == "true" ]] || [[ "$kill_running" -eq 1 ]]; then
+        close_tracked_thread "$session" "$tname"
+        closed_threads+=("$tname")
+      else
+        running_threads+=("$tname")
+      fi
+    done
+  fi
+
+  # Report any foreign non-agent terminal panes without closing them.
+  local foreign_tabs
+  foreign_tabs=$(list_terminal_panes_tsv "$session" | awk -F'\t' '$8 != "agent" { print $3 }' | sort -u | paste -sd',' - || true)
+
+  if [[ "${#running_threads[@]}" -gt 0 ]]; then
+    user_decision_required "Running threads remain at sweep time: ${running_threads[*]}. Ask the user whether to kill them (thread sweep --kill-running) or leave them (thread sweep --keep-session)."
+  fi
+
+  echo "CLOSED_THREADS=${closed_threads[*]:-none}"
+  [[ -n "$foreign_tabs" ]] && echo "FOREIGN_TABS_LEFT_UNTOUCHED=$foreign_tabs"
+
+  if [[ -f "$sdir/created_by_agent" ]] && [[ "$keep_session" -eq 0 ]] && [[ -z "$foreign_tabs" ]]; then
+    zellij kill-session "$session" 2>/dev/null || true
+    zellij delete-session -f "$session" 2>/dev/null || true
+    rm -rf "$sdir" "$STATE_ROOT/by-cwd/$(cwd_key)"
+    echo "SESSION_REMOVED=$session"
+  else
+    echo "SESSION_KEPT=$session"
+  fi
+}
+
+cmd_usage() {
+  local topic="${1:-all}"
+  case "$topic" in
+    init)
+      cat <<'EOF'
+Usage: thread init [<session-name>]
+Prepare the task session for the current working directory.
+Outputs: SESSION=<name>, CREATED_BY_AGENT=<0|1>, ATTACH_HINT=<cmd> (when outside zellij).
+EOF
+      ;;
+    spawn)
+      cat <<'EOF'
+Usage: thread spawn [-s <session>] [--persistent] [--wait <regex>] [--cwd <dir>] <name> -- <cmd...>
+Start a one-shot or persistent thread in its own zellij tab (max 8 active threads).
+Outputs: SESSION, THREAD, MODE, TAB_ID, PANE_ID, READINESS (ready|timeout when --wait is set).
+EOF
+      ;;
+    join)
+      cat <<'EOF'
+Usage: thread join [-s <session>] [--allow-over-10m] <name> [<seconds>]
+Wait for a one-shot thread using the wait ladder (10s, 20s, 40s, 80s, 180s).
+Outputs when done: STATUS=EXITED, EXIT_CODE=<code>, RUNG=<n>, TOTAL_WAITED_SECONDS=<s>.
+Outputs on expiry: STATUS=RUNNING, RUNG=<n>, WAITED_SECONDS=<s>, TOTAL_WAITED_SECONDS=<s>, NEXT_ACTION="thread inspect <name>".
+EOF
+      ;;
+    inspect)
+      cat <<'EOF'
+Usage: thread inspect [-s <session>] <name>
+Unlock the next join and print three sections:
+  === [META] === (EXITED, EXIT_STATUS, SCREEN_CHANGED, CPU_ACTIVE, CURSOR_COORDINATES, STAGNANT_INSPECTS, HANG_CANDIDATE)
+  === [PROCESS_TREE] === (ps output for the thread process and all its descendants)
+  === [SCREEN_TAIL] === (last 80 lines of full scrollback)
+EOF
+      ;;
+    send)
+      cat <<'EOF'
+Usage: thread send [-s <session>] [--wait-marker <shell|python>] [--raw] <name> <text>
+Send input to a live thread followed by Enter (unless --raw is set).
+With --wait-marker, sends a split boundary marker, waits up to 10s, and prints MARKER_MATCHED=<0|1> plus the full screen.
+EOF
+      ;;
+    read)
+      cat <<'EOF'
+Usage: thread read [-s <session>] [--ansi] [--keep] <name>
+Print === [SCREEN] === and === [RESULT] === (THREAD, EXIT_CODE, CLOSED).
+Automatically closes finished one-shot tabs unless --keep is passed.
+EOF
+      ;;
+    close)
+      cat <<'EOF'
+Usage: thread close [-s <session>] <name>
+Close an agent-created thread tab. Never closes the agent pane or foreign tabs.
+EOF
+      ;;
+    board)
+      cat <<'EOF'
+Usage: thread board [-s <session>]
+Print a TSV table of non-plugin panes: PANE_ID, TAB_ID, TAB_NAME, EXITED, EXIT_STATUS, CURSOR, COLS, TITLE.
+EOF
+      ;;
+    sweep)
+      cat <<'EOF'
+Usage: thread sweep [-s <session>] [--kill-running] [--keep-session]
+Close finished agent-created tabs and clean up the session if created by init.
+Exits with code 3 if running threads remain unless --kill-running or --keep-session is passed.
+EOF
+      ;;
+    *)
+      cat <<'EOF'
+Usage: thread <subcommand> [options]
+
+Subcommands:
+  init [<session-name>]
+      Prepare the task session for $PWD.
+      Output: SESSION, CREATED_BY_AGENT (0|1), ATTACH_HINT (outside zellij).
+
+  spawn [-s <session>] [--persistent] [--wait <regex>] [--cwd <dir>] <name> -- <cmd...>
+      Start a one-shot or persistent thread in a zellij tab (limit 8 active threads).
+      Output: SESSION, THREAD, MODE, TAB_ID, PANE_ID, READINESS (when --wait is set).
+
+  join [-s <session>] [--allow-over-10m] <name> [<seconds>]
+      Wait on a one-shot thread up to the ladder ceiling (10s, 20s, 40s, 80s, 180s).
+      Output: STATUS=(EXITED|RUNNING), EXIT_CODE, RUNG, TOTAL_WAITED_SECONDS, NEXT_ACTION.
+
+  inspect [-s <session>] <name>
+      Collect [META], [PROCESS_TREE], and [SCREEN_TAIL] after a join expiry; unlocks next join.
+
+  send [-s <session>] [--wait-marker <shell|python>] [--raw] <name> <text>
+      Send characters + Enter (unless --raw) to a live thread; optionally wait for a split marker.
+
+  read [-s <session>] [--ansi] [--keep] <name>
+      Dump full screen + EXIT_CODE; closes finished one-shot tabs unless --keep is set.
+
+  close [-s <session>] <name>
+      Close an agent-created thread tab.
+
+  board [-s <session>]
+      Print TSV table of all terminal panes in the session.
+
+  sweep [-s <session>] [--kill-running] [--keep-session]
+      Close finished agent threads and remove agent-created session when clean.
+
+  help | usage [<subcommand>]
+      Show this CLI reference or detailed usage for one subcommand.
+
+Exit codes:
+  0  Success (for join, check STATUS=EXITED vs STATUS=RUNNING).
+  1  ERROR: Invalid arguments, missing zellij, or failed zellij action.
+  2  POLICY_ERROR: 8-thread cap reached, join before inspect after expiry, or closing protected pane.
+  3  USER_DECISION_REQUIRED: Total join wait >= 600s, or running threads remain at sweep.
+EOF
+      ;;
+  esac
+}
+
+main() {
+  local subcmd="${1:-help}"
+  shift || true
+  case "$subcmd" in
+    help|usage|-h|--help)
+      cmd_usage "$@"
+      return 0
+      ;;
+  esac
+  if [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
+    cmd_usage "$subcmd"
+    return 0
+  fi
+  require_tools
+  case "$subcmd" in
+    init) cmd_init "$@" ;;
+    spawn) cmd_spawn "$@" ;;
+    join) cmd_join "$@" ;;
+    inspect) cmd_inspect "$@" ;;
+    send) cmd_send "$@" ;;
+    read) cmd_read "$@" ;;
+    close) cmd_close "$@" ;;
+    board) cmd_board "$@" ;;
+    sweep) cmd_sweep "$@" ;;
+    *)
+      die "Unknown subcommand '$subcmd'. Run 'thread help' for usage."
+      ;;
+  esac
+}
+
+main "$@"
