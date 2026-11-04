@@ -3,7 +3,7 @@
 #
 # Public interface:
 #   thread init [<session-name>]
-#   thread spawn [-s <session>] [--persistent] [--wait <regex>] [--cwd <dir>] <name> -- <cmd...>
+#   thread spawn [-s <session>] [--persistent] [--eta <seconds>] [--wait <regex>] [--cwd <dir>] <name> -- <cmd...>
 #   thread join [-s <session>] [--allow-over-10m] <name> [<seconds>]
 #   thread inspect [-s <session>] <name>
 #   thread send [-s <session>] [--wait-marker <shell|python>] [--raw] <name> <text>
@@ -17,19 +17,22 @@
 #   - Session names and thread names must match ^[A-Za-z0-9._-]+$ (1 to 64 characters).
 #   - Thread name "agent" is reserved for the control pane.
 #   - A session can hold at most 8 active agent-created threads at one time.
-#   - Wait ceiling per join call is between 1 and 180 seconds.
+#   - Wait ceiling per join call is between 1 and 180 seconds; it starts at ETA/4 (min 10s) and doubles.
 #
 # Error conditions (non-zero exit codes):
 #   - 1: Invalid arguments, missing zellij binary, or failed zellij action.
 #   - 2: Policy violation (cap of 8 threads reached, join called before inspect after expiry,
 #        reserved name "agent" used for spawn or close, or join called on a persistent thread).
 #        (Closing an untracked tab is exit 1: it is refused as an invalid argument.)
-#   - 3: Action requires user decision (join total wait >= 600s, or sweep found running threads).
+#   - 3: Action requires user decision (join total wait >= 600s, or sweep found running threads
+#        without --kill-running or --keep-session).
 #
 # Safety rules:
 #   - Never call kill-all-sessions, delete-all-sessions, attach (without -b or PTY helper), or subscribe.
 #   - Always pass --no-focus when creating tabs or panes so attached human clients do not lose focus.
 #   - Only close tabs recorded as created by this tool in the session state directory.
+#   - sweep may remove an agent-created session, including the agent pane. It keeps the session when
+#     foreign tabs exist, when --keep-session is set, or when sweep runs inside that session.
 
 set -euo pipefail
 
@@ -306,10 +309,12 @@ cmd_spawn() {
   local wait_regex=""
   local cwd="$PWD"
   local name=""
+  local eta=0
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       -s|--session) session="$2"; shift 2 ;;
+      --eta) eta="$2"; shift 2 ;;
       --persistent) mode="persistent"; shift ;;
       --wait) wait_regex="$2"; shift 2 ;;
       --cwd) cwd="$2"; shift 2 ;;
@@ -332,6 +337,14 @@ cmd_spawn() {
 
   validate_identifier "$name" "thread name"
   [[ "$name" != "agent" ]] || policy_error "Thread name 'agent' is reserved for the agent pane."
+  [[ "$eta" =~ ^[0-9]+$ ]] && [[ "$eta" -le 86400 ]] || die "--eta must be a whole number of seconds (0-86400)."
+
+  # A command whose stdout goes to a file leaves the tab blank, so neither the user nor
+  # `inspect`/`read` can see anything. Warn (don't block): the command may still be valid.
+  if [[ $# -eq 1 ]] && [[ "$1" =~ (^|[[:space:]\;\&\|])(1?\>\>?|\&\>\>?)[[:space:]]*[^\&[:space:]] ]] \
+    && [[ ! "$1" =~ (^|[[:space:]\;\&\|])(1?\>\>?|\&\>\>?)[[:space:]]*/dev/null ]]; then
+    echo "WARNING: command redirects stdout to a file; the tab will show no output. Use '| tee <file>' to keep it visible." >&2
+  fi
 
   session=$(resolve_session "$session")
   session_exists "$session" || die "Session '$session' does not exist. Run 'thread init' first."
@@ -363,6 +376,7 @@ cmd_spawn() {
   printf '0\n' > "$tdir/elapsed_wait"
   printf '0\n' > "$tdir/needs_inspect"
   printf '0\n' > "$tdir/stagnant_inspects"
+  printf '%s\n' "$eta" > "$tdir/eta"
 
   {
     printf '#!/usr/bin/env bash\n'
@@ -475,15 +489,26 @@ EOF
   return 0
 }
 
+# Exponential backoff: base, 2*base, 4*base ... capped at MAX_WAIT_SECONDS.
+# The base is a quarter of the agent's ETA estimate (10s when no ETA was given), so a
+# job expected to take 20 minutes is not polled at the same rhythm as one expected to take 40s.
+ladder_base_for_eta() {
+  local eta="$1"
+  local base=$((eta / 4))
+  [[ "$base" -lt 10 ]] && base=10
+  [[ "$base" -gt "$MAX_WAIT_SECONDS" ]] && base="$MAX_WAIT_SECONDS"
+  echo "$base"
+}
+
 ladder_seconds_for_rung() {
   local rung="$1"
-  case "$rung" in
-    1) echo 10 ;;
-    2) echo 20 ;;
-    3) echo 40 ;;
-    4) echo 80 ;;
-    *) echo 180 ;;
-  esac
+  local base="${2:-10}"
+  local secs="$MAX_WAIT_SECONDS"
+  if [[ "$rung" -le 6 ]]; then
+    secs=$((base << (rung - 1)))
+    [[ "$secs" -gt "$MAX_WAIT_SECONDS" ]] && secs="$MAX_WAIT_SECONDS"
+  fi
+  echo "$secs"
 }
 
 cmd_join() {
@@ -537,26 +562,32 @@ cmd_join() {
     policy_error "Previous join for '$name' expired. Run 'thread inspect $name' before joining again."
   fi
 
+  local eta
+  eta=$(cat "$tdir/eta" 2>/dev/null || echo 0)
+  # Ask the user after 10 minutes, or after twice the agent's own estimate if that is longer.
+  local ask_after="$PROMPT_USER_WAIT_SECONDS"
+  [[ $((eta * 2)) -gt "$ask_after" ]] && ask_after=$((eta * 2))
+
   local elapsed_wait
   elapsed_wait=$(cat "$tdir/elapsed_wait" 2>/dev/null || echo 0)
   if [[ "$allow_over_10m" -eq 1 ]]; then
     printf '1\n' > "$tdir/allow_over_10m"
   fi
-  if [[ "$elapsed_wait" -ge "$PROMPT_USER_WAIT_SECONDS" ]] && [[ ! -f "$tdir/allow_over_10m" ]]; then
-    user_decision_required "Thread '$name' has waited ${elapsed_wait}s (>= 600s). Ask the user once whether to keep waiting or move on; if keeping waiting, pass --allow-over-10m."
+  if [[ "$elapsed_wait" -ge "$ask_after" ]] && [[ ! -f "$tdir/allow_over_10m" ]]; then
+    user_decision_required "Thread '$name' has waited ${elapsed_wait}s (>= ${ask_after}s). Ask the user once whether to keep waiting or move on; if keeping waiting, pass --allow-over-10m."
   fi
 
   local prev_rung
   prev_rung=$(cat "$tdir/rung" 2>/dev/null || echo 0)
   local next_rung=$((prev_rung + 1))
   local rung_seconds
-  rung_seconds=$(ladder_seconds_for_rung "$next_rung")
+  rung_seconds=$(ladder_seconds_for_rung "$next_rung" "$(ladder_base_for_eta "$eta")")
 
   local wait_seconds="$rung_seconds"
   if [[ -n "$requested_seconds" ]]; then
     [[ "$requested_seconds" =~ ^[0-9]+$ ]] || die "Wait seconds must be a positive integer."
     if [[ "$next_rung" -eq 1 ]]; then
-      wait_seconds=10
+      wait_seconds="$rung_seconds"
     else
       wait_seconds="$requested_seconds"
       [[ "$wait_seconds" -lt "$rung_seconds" ]] && wait_seconds="$rung_seconds"
@@ -592,6 +623,10 @@ cmd_join() {
   echo "RUNG=$next_rung"
   echo "WAITED_SECONDS=$wait_seconds"
   echo "TOTAL_WAITED_SECONDS=$elapsed_wait"
+  if [[ "$eta" -gt 0 ]]; then
+    echo "ETA_SECONDS=$eta"
+    [[ "$elapsed_wait" -gt "$eta" ]] && echo "PAST_ETA=yes"
+  fi
   echo "NEXT_ACTION=thread inspect $name"
 }
 
@@ -956,18 +991,40 @@ cmd_sweep() {
     done
   fi
 
-  # Report any foreign non-agent terminal panes without closing them.
-  local foreign_tabs
-  foreign_tabs=$(list_terminal_panes_tsv "$session" | awk -F'\t' '$8 != "agent" { print $3 }' | sort -u | paste -sd',' - || true)
-
-  if [[ "${#running_threads[@]}" -gt 0 ]]; then
-    user_decision_required "Running threads remain at sweep time: ${running_threads[*]}. Ask the user whether to kill them (thread sweep --kill-running) or leave them (thread sweep --keep-session)."
+  # Report terminal panes the tool did not create. Tracked thread panes are not foreign, even while they run.
+  local tracked_panes=""
+  if [[ -d "$sdir/threads" ]]; then
+    local tdir
+    for tdir in "$sdir/threads"/*; do
+      [[ -d "$tdir" ]] || continue
+      local tracked_pane
+      tracked_pane=$(cat "$tdir/pane_num" 2>/dev/null || true)
+      [[ -n "$tracked_pane" ]] && tracked_panes+="$tracked_pane "
+    done
   fi
+  local foreign_tabs
+  foreign_tabs=$(list_terminal_panes_tsv "$session" | awk -F'\t' -v tracked="$tracked_panes" '
+    BEGIN { n = split(tracked, ids, " "); for (i = 1; i <= n; i++) if (ids[i] != "") skip[ids[i]] = 1 }
+    $8 != "agent" && !($1 in skip) { print $3 }
+  ' | sort -u | paste -sd',' - || true)
 
   echo "CLOSED_THREADS=${closed_threads[*]:-none}"
   [[ -n "$foreign_tabs" ]] && echo "FOREIGN_TABS_LEFT_UNTOUCHED=$foreign_tabs"
+  [[ "${#running_threads[@]}" -gt 0 ]] && echo "RUNNING_THREADS=${running_threads[*]}"
 
-  if [[ -f "$sdir/created_by_agent" ]] && [[ "$keep_session" -eq 0 ]] && [[ -z "$foreign_tabs" ]]; then
+  # --keep-session is the user's "leave the threads and the session" decision, so it also clears exit 3.
+  if [[ "${#running_threads[@]}" -gt 0 ]] && [[ "$keep_session" -eq 0 ]]; then
+    echo "SESSION_KEPT=$session"
+    user_decision_required "Running threads remain at sweep time: ${running_threads[*]}. Ask the user whether to kill them (thread sweep --kill-running) or leave them (thread sweep --keep-session)."
+  fi
+
+  # Deleting the session we run in would kill this shell, so keep it for the caller to remove later.
+  local caller_inside=0
+  if [[ -n "${ZELLIJ_SESSION_NAME:-}" ]] && [[ "$ZELLIJ_SESSION_NAME" == "$session" ]]; then
+    caller_inside=1
+  fi
+
+  if [[ -f "$sdir/created_by_agent" ]] && [[ "$keep_session" -eq 0 ]] && [[ -z "$foreign_tabs" ]] && [[ "$caller_inside" -eq 0 ]]; then
     zellij kill-session "$session" 2>/dev/null || true
     zellij delete-session -f "$session" 2>/dev/null || true
     rm -rf "$sdir" "$STATE_ROOT/by-cwd/$(cwd_key)"
@@ -989,17 +1046,18 @@ EOF
       ;;
     spawn)
       cat <<'EOF'
-Usage: thread spawn [-s <session>] [--persistent] [--wait <regex>] [--cwd <dir>] <name> -- <cmd...>
+Usage: thread spawn [-s <session>] [--persistent] [--eta <seconds>] [--wait <regex>] [--cwd <dir>] <name> -- <cmd...>
 Start a one-shot or persistent thread in its own zellij tab (max 8 active threads).
+--eta is your estimate of the run time in seconds; join polls start at ETA/4 (min 10s) and double up to 180s.
 Outputs: SESSION, THREAD, MODE, TAB_ID, PANE_ID, READINESS (ready|timeout when --wait is set).
 EOF
       ;;
     join)
       cat <<'EOF'
 Usage: thread join [-s <session>] [--allow-over-10m] <name> [<seconds>]
-Wait for a one-shot thread using the wait ladder (10s, 20s, 40s, 80s, 180s).
+Wait for a one-shot thread using exponential backoff: ETA/4 (min 10s when no --eta), doubling, capped at 180s.
 Outputs when done: STATUS=EXITED, EXIT_CODE=<code>, RUNG=<n>, TOTAL_WAITED_SECONDS=<s>.
-Outputs on expiry: STATUS=RUNNING, RUNG=<n>, WAITED_SECONDS=<s>, TOTAL_WAITED_SECONDS=<s>, NEXT_ACTION="thread inspect <name>".
+Outputs on expiry: STATUS=RUNNING, RUNG=<n>, WAITED_SECONDS=<s>, TOTAL_WAITED_SECONDS=<s>, ETA_SECONDS and PAST_ETA=yes (when --eta was set and exceeded), NEXT_ACTION="thread inspect <name>".
 EOF
       ;;
     inspect)
@@ -1040,8 +1098,11 @@ EOF
     sweep)
       cat <<'EOF'
 Usage: thread sweep [-s <session>] [--kill-running] [--keep-session]
-Close finished agent-created tabs and clean up the session if created by init.
-Exits with code 3 if running threads remain unless --kill-running or --keep-session is passed.
+Close finished agent-created thread tabs.
+Prints CLOSED_THREADS, RUNNING_THREADS, FOREIGN_TABS_LEFT_UNTOUCHED, then SESSION_REMOVED or SESSION_KEPT.
+Exits 3 if running threads remain, unless --kill-running or --keep-session is passed.
+With no running threads, removes the agent-created session (including the agent pane) unless --keep-session is set,
+a foreign tab remains, or sweep runs inside that session.
 EOF
       ;;
     *)
@@ -1053,12 +1114,13 @@ Subcommands:
       Prepare the task session for $PWD.
       Output: SESSION, CREATED_BY_AGENT (0|1), ATTACH_HINT (outside zellij).
 
-  spawn [-s <session>] [--persistent] [--wait <regex>] [--cwd <dir>] <name> -- <cmd...>
+  spawn [-s <session>] [--persistent] [--eta <seconds>] [--wait <regex>] [--cwd <dir>] <name> -- <cmd...>
       Start a one-shot or persistent thread in a zellij tab (limit 8 active threads).
+      --eta: your run-time estimate in seconds; sets the join backoff (ETA/4, doubling, max 180s).
       Output: SESSION, THREAD, MODE, TAB_ID, PANE_ID, READINESS (when --wait is set).
 
   join [-s <session>] [--allow-over-10m] <name> [<seconds>]
-      Wait on a one-shot thread up to the ladder ceiling (10s, 20s, 40s, 80s, 180s).
+      Wait on a one-shot thread up to the current backoff ceiling (ETA/4, doubling, max 180s).
       Output: STATUS=(EXITED|RUNNING), EXIT_CODE, RUNG, TOTAL_WAITED_SECONDS, NEXT_ACTION.
 
   inspect [-s <session>] <name>
@@ -1077,7 +1139,7 @@ Subcommands:
       Print TSV table of all terminal panes in the session.
 
   sweep [-s <session>] [--kill-running] [--keep-session]
-      Close finished agent threads and remove agent-created session when clean.
+      Close finished agent threads; remove the agent-created session when clean and not kept.
 
   help | usage [<subcommand>]
       Show this CLI reference or detailed usage for one subcommand.
@@ -1086,7 +1148,8 @@ Exit codes:
   0  Success (for join, check STATUS=EXITED vs STATUS=RUNNING).
   1  ERROR: Invalid arguments, missing zellij, or failed zellij action.
   2  POLICY_ERROR: 8-thread cap reached, join before inspect after expiry, or closing protected pane.
-  3  USER_DECISION_REQUIRED: Total join wait >= 600s, or running threads remain at sweep.
+  3  USER_DECISION_REQUIRED: Total join wait >= 600s, or running threads remain at sweep without
+     --kill-running or --keep-session.
 EOF
       ;;
   esac
