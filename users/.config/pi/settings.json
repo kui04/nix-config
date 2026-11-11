@@ -1,6 +1,5 @@
 {
   "packages": [
-    "npm:pi-ask-user",
     "npm:pi-permission-system",
     "npm:pi-zentui",
     "git:github.com/fgrehm/pi-ollama-cloud",

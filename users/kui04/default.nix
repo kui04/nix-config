@@ -25,7 +25,6 @@ in
 
     packages = with pkgs; [
       chromium
-      conda
       devenv
       entr
       ffmpeg-full
@@ -42,8 +41,6 @@ in
       unstable.hmcl
       unstable.vscode
       unstable.zellij
-      unstable.zed-editor
-      unstable.helix
     ];
   };
 
