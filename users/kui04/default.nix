@@ -38,6 +38,7 @@ in
       ripgrep
       vlc
       # from unstable
+      unstable.antigravity-hub
       unstable.hmcl
       unstable.vscode
       unstable.zellij
@@ -53,7 +54,6 @@ in
     "com.github.gmg137.netease-cloud-music-gtk"
     "com.github.tchx84.Flatseal"
     "com.github.wwmm.easyeffects"
-    "com.google.AndroidStudio"
     "com.google.Chrome"
     "com.moonlight_stream.Moonlight"
     "com.qq.QQ"
@@ -61,7 +61,6 @@ in
     "com.valvesoftware.Steam"
     "io.dbeaver.DBeaverCommunity"
     "io.github.giantpinkrobots.flatsweep"
-    "md.obsidian.Obsidian"
     "net.agalwood.Motrix"
     "net.codelogistics.clicker"
     "net.lutris.Lutris"
