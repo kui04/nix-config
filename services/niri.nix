@@ -36,4 +36,7 @@
 
   # hint Electron apps to use Wayland
   environment.sessionVariables.NIXOS_OZONE_WL = "1";
+
+  # Default OOMPolicy=stop ends the session when the OOM killer kills a child (systemd.service(5)).
+  systemd.user.services.niri.serviceConfig.OOMPolicy = "continue";
 }
