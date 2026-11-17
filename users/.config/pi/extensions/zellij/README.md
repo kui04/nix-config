@@ -10,7 +10,9 @@ replaces polling shell scripts with event-driven `followUp` turns and live UI wi
 - `bash` and `tee` in `PATH`
 
 If `zellij` is missing or older than `0.45.0`, the extension sets a status notice and disables itself. Child `pi`
-subagents started with `PI_ZELLIJ_SUBAGENT=1` also skip loading this extension.
+subagents started with `PI_ZELLIJ_SUBAGENT=1` also skip loading this extension. Wrapped commands (`zellij_run`,
+`zellij_service`, `zellij_subagent`, and `zellij_repl` with a command) export the host `pi` process `PATH` so tools from
+Nix or `devenv` remain available inside Zellij panes.
 
 ## Session Mapping
 
@@ -18,7 +20,8 @@ subagents started with `PI_ZELLIJ_SUBAGENT=1` also skip loading this extension.
   untouched on shutdown.
 - **Outside Zellij**: On first tool call, the extension starts a detached background session named
   `pi-<cwd>-<shortSessionId>` via `zellij attach --create-background` and shows the `zellij attach <name>` command in
-  the Pi status bar.
+  the Pi status bar. On `quit`, empty managed sessions with no running panes are killed and deleted automatically; if
+  background services or tasks are still running, the session stays alive.
 
 State for tracked panes is saved in the Pi session branch (`zellij-state`) and reconciled against live panes on
 `/reload` or resume. Forked sessions (`reason === "fork"`) start with a clean pane set and a new managed session.
@@ -35,7 +38,8 @@ State for tracked panes is saved in the Pi session branch (`zellij-state`) and r
 ## Tools and Commands
 
 - `zellij_run`: Run a command in a managed pane (`layout`: `stacked`, `split`, `floating`, or `tab`).
-- `zellij_service`: Manage persistent services with `start`, `stop`, `status`, and `logs`.
+- `zellij_service`: Manage persistent services with `start`, `stop`, `status`, and `logs`. Note: `readyPattern` rejects
+  nested quantifiers (`(\w+)+` style) with a static heuristic to prevent catastrophic regex backtracking.
 - `zellij_subagent`: Delegate a self-contained prompt to a child `pi` instance.
 - `zellij_repl`: Open a floating shell, REPL, `ssh` session, or debugger.
 - `zellij_pane`: Run `list`, `read`, `send`, `keys`, `focus`, `float`, `close`, or `sweep` on tracked panes.

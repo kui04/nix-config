@@ -31,7 +31,6 @@ export interface NewPaneOptions {
     direction?: SplitDirection
     noFocus?: boolean
     notify?: boolean
-    closeOnExit?: boolean
     command: string[]
 }
 
@@ -39,17 +38,18 @@ export interface NewTabOptions {
     name: string
     cwd?: string
     noFocus?: boolean
-    closeOnExit?: boolean
     command?: string[]
 }
 
 interface SharedHelperClient {
     refs: number
+    persistent: boolean
     readyPromise: Promise<void>
     cleanup: () => void
 }
 
 const activeHelperClients = new Map<string, SharedHelperClient>()
+const pendingHelperAcquires = new Map<string, Promise<SharedHelperClient | null>>()
 
 /**
  * Validate a Zellij session, tab, or pane identifier.
@@ -94,6 +94,7 @@ export function formatPaneId(paneId: string | number): string {
     return paneId
 }
 
+/** Parse `terminal_<id>` or bare numeric pane IDs into a non-negative integer. */
 export function parsePaneNumericId(rawPaneId: string): number {
     const trimmed = rawPaneId.trim()
     const match = trimmed.match(/^(?:terminal_)?(\d+)$/)
@@ -106,17 +107,16 @@ export function parsePaneNumericId(rawPaneId: string): number {
 async function execZellij(
     pi: ExtensionAPI,
     args: string[],
+    label: string,
     timeoutMs = CLI_TIMEOUT_MS,
 ): Promise<string> {
     const res = await pi.exec("zellij", args, { timeout: timeoutMs })
     if (res.killed) {
-        throw new Error(`zellij ${args.join(" ")} timed out after ${timeoutMs}ms`)
+        throw new Error(`zellij ${label} timed out after ${timeoutMs}ms`)
     }
     if (res.code !== 0) {
         const msg = res.stderr.trim() || res.stdout.trim() || `exit code ${res.code}`
-        const sub =
-            args[0] === "--session" ? (args[3] ?? args[2] ?? "action") : (args[0] ?? "command")
-        throw new Error(`zellij ${sub} failed: ${msg}`)
+        throw new Error(`zellij ${label} failed: ${msg}`)
     }
     return res.stdout
 }
@@ -153,18 +153,29 @@ export async function probeZellijVersion(
     }
 }
 
-/** Return names of currently running (non-EXITED) Zellij sessions. */
-export async function listSessions(pi: ExtensionAPI): Promise<string[]> {
-    const res = await pi.exec("zellij", ["list-sessions", "-n"], { timeout: 5_000 })
-    if (res.killed || res.code !== 0) return []
+/** Parse `zellij list-sessions -n` stdout, preserving spaces in session names and excluding EXITED sessions. */
+export function parseListSessionsOutput(stdout: string): string[] {
     const sessions: string[] = []
-    for (const rawLine of res.stdout.split(/\r?\n/)) {
+    for (const rawLine of stdout.split(/\r?\n/)) {
         const line = rawLine.trim()
         if (!line || /\(EXITED\b/i.test(line)) continue
-        const name = line.split(/\s+/)[0]
+        const name = line
+            .replace(/\s+\[Created\b[\s\S]*$/, "")
+            .replace(/\s+\(current\)\s*$/, "")
+            .trim()
         if (name) sessions.push(name)
     }
     return sessions
+}
+
+/**
+ * Return names of currently active (non-EXITED) Zellij sessions.
+ * Uses `-n` instead of `-s` because `-s` prints dead serialized `(EXITED)` sessions too.
+ */
+export async function listSessions(pi: ExtensionAPI): Promise<string[]> {
+    const res = await pi.exec("zellij", ["list-sessions", "-n"], { timeout: 5_000 })
+    if (res.killed || res.code !== 0) return []
+    return parseListSessionsOutput(res.stdout)
 }
 
 export async function activeClientCount(pi: ExtensionAPI, session: string): Promise<number> {
@@ -187,12 +198,19 @@ export async function ensureBackgroundSession(pi: ExtensionAPI, session: string)
 
     // Clear any dead serialized session of the same name before creating a fresh one.
     await pi.exec("zellij", ["delete-session", session], { timeout: 3_000 }).catch(() => {})
-    await execZellij(pi, ["attach", "--create-background", session])
+    await execZellij(pi, ["attach", "--create-background", session], "attach --create-background")
     for (let i = 0; i < 20; i++) {
         const sessions = await listSessions(pi)
         if (sessions.includes(session)) return
-        await new Promise((resolve) => setTimeout(resolve, 50))
+        await new Promise((done) => setTimeout(done, 50))
     }
+    throw new Error(`Timed out waiting for background zellij session "${session}" to appear.`)
+}
+
+export async function killAndDeleteSession(pi: ExtensionAPI, session: string): Promise<void> {
+    validateIdentifier(session, "session name")
+    await pi.exec("zellij", ["kill-session", session], { timeout: 5_000 }).catch(() => {})
+    await pi.exec("zellij", ["delete-session", "-f", session], { timeout: 5_000 }).catch(() => {})
 }
 
 function killHelperProcessGroup(helper: ChildProcess): void {
@@ -216,35 +234,7 @@ function killHelperProcessGroup(helper: ChildProcess): void {
     }
 }
 
-/**
- * Zellij 0.45/0.46 drops `new-tab` or rejects `new-pane` in sessions with zero
- * attached clients because geometry requires an active client. Refcount a shared
- * temporary PTY client per session so concurrent calls never yank it early.
- */
-export async function withTemporaryClient<T>(
-    pi: ExtensionAPI,
-    session: string,
-    fn: () => Promise<T>,
-): Promise<T> {
-    const existingShared = activeHelperClients.get(session)
-    if (existingShared) {
-        existingShared.refs += 1
-        try {
-            await existingShared.readyPromise
-            return await fn()
-        } finally {
-            existingShared.refs -= 1
-            if (existingShared.refs === 0) {
-                activeHelperClients.delete(session)
-                existingShared.cleanup()
-            }
-        }
-    }
-
-    if ((await activeClientCount(pi, session)) > 0) {
-        return fn()
-    }
-
+function spawnHelperClient(pi: ExtensionAPI, session: string): SharedHelperClient {
     // Strip ZELLIJ* variables so `zellij attach` does not refuse with
     // "You are trying to attach to the current session".
     const helperEnv = { ...process.env }
@@ -269,7 +259,13 @@ export async function withTemporaryClient<T>(
     })
     helper.on("exit", () => {
         exitedEarly = true
+        const current = activeHelperClients.get(session)
+        if (current && current.cleanup === cleanup) {
+            activeHelperClients.delete(session)
+        }
     })
+
+    const cleanup = () => killHelperProcessGroup(helper)
 
     const readyPromise = (async () => {
         for (let i = 0; i < 40; i++) {
@@ -284,24 +280,96 @@ export async function withTemporaryClient<T>(
                     `Temporary PTY client exited before attaching to session "${session}".`,
                 )
             }
-            await new Promise((resolve) => setTimeout(resolve, 50))
+            await new Promise((done) => setTimeout(done, 50))
         }
         throw new Error(`Timed out attaching temporary PTY client to session "${session}".`)
-    })()
+    })().catch((err) => {
+        activeHelperClients.delete(session)
+        cleanup()
+        throw err
+    })
 
     const shared: SharedHelperClient = {
-        refs: 1,
+        refs: 0,
+        persistent: false,
         readyPromise,
-        cleanup: () => killHelperProcessGroup(helper),
+        cleanup,
     }
     activeHelperClients.set(session, shared)
+    return shared
+}
 
+/**
+ * Serialize helper client discovery/creation per session so concurrent calls
+ * never spawn duplicate helper processes.
+ */
+async function acquireHelperClientIfNeeded(
+    pi: ExtensionAPI,
+    session: string,
+): Promise<SharedHelperClient | null> {
+    const existing = activeHelperClients.get(session)
+    if (existing) return existing
+
+    const pending = pendingHelperAcquires.get(session)
+    if (pending) return pending
+
+    const init = (async (): Promise<SharedHelperClient | null> => {
+        const again = activeHelperClients.get(session)
+        if (again) return again
+        if ((await activeClientCount(pi, session)) > 0) return null
+        return spawnHelperClient(pi, session)
+    })().finally(() => {
+        pendingHelperAcquires.delete(session)
+    })
+
+    pendingHelperAcquires.set(session, init)
+    return init
+}
+
+/**
+ * Keep one headless PTY client attached to `session` while tracked panes exist
+ * so repeated `new-pane` calls avoid paying the 100-500ms attach cost each time.
+ */
+export async function retainPersistentClient(pi: ExtensionAPI, session: string): Promise<void> {
+    const shared = await acquireHelperClientIfNeeded(pi, session)
+    if (!shared) return
+    shared.persistent = true
+    await shared.readyPromise
+}
+
+/** Release the persistent headless PTY client for `session` when no tracked panes remain. */
+export function releasePersistentClient(session: string): void {
+    const shared = activeHelperClients.get(session)
+    if (!shared) return
+    shared.persistent = false
+    if (shared.refs === 0) {
+        activeHelperClients.delete(session)
+        shared.cleanup()
+    }
+}
+
+/**
+ * Zellij 0.45/0.46 drops `new-tab` or rejects `new-pane` in sessions with zero
+ * attached clients because geometry requires an active client. Refcount a shared
+ * temporary PTY client per session so concurrent calls never yank it early.
+ */
+export async function withTemporaryClient<T>(
+    pi: ExtensionAPI,
+    session: string,
+    fn: () => Promise<T>,
+): Promise<T> {
+    const shared = await acquireHelperClientIfNeeded(pi, session)
+    if (!shared) {
+        return fn()
+    }
+
+    shared.refs += 1
     try {
-        await readyPromise
+        await shared.readyPromise
         return await fn()
     } finally {
         shared.refs -= 1
-        if (shared.refs === 0) {
+        if (shared.refs === 0 && !shared.persistent) {
             activeHelperClients.delete(session)
             shared.cleanup()
         }
@@ -309,12 +377,20 @@ export async function withTemporaryClient<T>(
 }
 
 export async function listTabs(pi: ExtensionAPI, session: string): Promise<ZellijTabJson[]> {
-    const out = await execZellij(pi, ["--session", session, "action", "list-tabs", "-a", "-j"])
+    const out = await execZellij(
+        pi,
+        ["--session", session, "action", "list-tabs", "-a", "-j"],
+        "list-tabs",
+    )
     return parseZellijTabsJson(out)
 }
 
 export async function listPanes(pi: ExtensionAPI, session: string): Promise<ZellijPaneJson[]> {
-    const out = await execZellij(pi, ["--session", session, "action", "list-panes", "-a", "-j"])
+    const out = await execZellij(
+        pi,
+        ["--session", session, "action", "list-panes", "-a", "-j"],
+        "list-panes",
+    )
     return parseZellijPanesJson(out)
 }
 
@@ -326,16 +402,27 @@ export async function newTab(
     validateIdentifier(opts.name, "tab name")
     const args = ["--session", session, "action", "new-tab", "-n", opts.name]
     if (opts.cwd) args.push("-c", opts.cwd)
-    if (opts.noFocus !== false) args.push("--no-focus")
-    if (opts.closeOnExit) args.push("--close-on-exit")
+    if (opts.noFocus) args.push("--no-focus")
     if (opts.command && opts.command.length > 0) {
         args.push("--", ...opts.command)
     }
-    const out = (await execZellij(pi, args)).trim()
+    const out = (await execZellij(pi, args, "new-tab")).trim()
     if (!/^\d+$/.test(out)) {
         throw new Error(`Unexpected tab ID from zellij new-tab: "${out}"`)
     }
     return parseInt(out, 10)
+}
+
+export async function closeTabById(
+    pi: ExtensionAPI,
+    session: string,
+    tabId: number,
+): Promise<void> {
+    await execZellij(
+        pi,
+        ["--session", session, "action", "close-tab-by-id", String(tabId)],
+        "close-tab-by-id",
+    )
 }
 
 export async function newPane(
@@ -370,10 +457,9 @@ export async function newPane(
     }
     if (opts.noFocus) args.push("--no-focus")
     if (opts.notify) args.push("--notify")
-    if (opts.closeOnExit) args.push("--close-on-exit")
     args.push("--", ...opts.command)
 
-    const out = await withTemporaryClient(pi, session, () => execZellij(pi, args))
+    const out = await withTemporaryClient(pi, session, () => execZellij(pi, args, "new-pane"))
     const numericId = parsePaneNumericId(out)
     return { paneId: formatPaneId(numericId), numericId }
 }
@@ -384,18 +470,19 @@ export async function stackPanes(
     paneIds: string[],
 ): Promise<void> {
     if (paneIds.length < 2) return
-    await execZellij(pi, [
-        "--session",
-        session,
-        "action",
+    await execZellij(
+        pi,
+        ["--session", session, "action", "stack-panes", "--", ...paneIds.map(formatPaneId)],
         "stack-panes",
-        "--",
-        ...paneIds.map(formatPaneId),
-    ])
+    )
 }
 
 export async function watchPane(pi: ExtensionAPI, session: string, paneId: string): Promise<void> {
-    await execZellij(pi, ["--session", session, "action", "watch-pane", "-p", formatPaneId(paneId)])
+    await execZellij(
+        pi,
+        ["--session", session, "action", "watch-pane", "-p", formatPaneId(paneId)],
+        "watch-pane",
+    )
 }
 
 export async function renamePane(
@@ -405,24 +492,27 @@ export async function renamePane(
     name: string,
 ): Promise<void> {
     validateIdentifier(name, "pane name")
-    await execZellij(pi, [
-        "--session",
-        session,
-        "action",
+    await execZellij(
+        pi,
+        ["--session", session, "action", "rename-pane", "-p", formatPaneId(paneId), "--", name],
         "rename-pane",
-        "-p",
-        formatPaneId(paneId),
-        "--",
-        name,
-    ])
+    )
 }
 
 export async function focusPane(pi: ExtensionAPI, session: string, paneId: string): Promise<void> {
-    await execZellij(pi, ["--session", session, "action", "focus-pane-id", formatPaneId(paneId)])
+    await execZellij(
+        pi,
+        ["--session", session, "action", "focus-pane-id", formatPaneId(paneId)],
+        "focus-pane-id",
+    )
 }
 
 export async function closePane(pi: ExtensionAPI, session: string, paneId: string): Promise<void> {
-    await execZellij(pi, ["--session", session, "action", "close-pane", "-p", formatPaneId(paneId)])
+    await execZellij(
+        pi,
+        ["--session", session, "action", "close-pane", "-p", formatPaneId(paneId)],
+        "close-pane",
+    )
 }
 
 export async function toggleEmbedOrFloating(
@@ -430,24 +520,18 @@ export async function toggleEmbedOrFloating(
     session: string,
     paneId: string,
 ): Promise<void> {
-    await execZellij(pi, [
-        "--session",
-        session,
-        "action",
+    await execZellij(
+        pi,
+        [
+            "--session",
+            session,
+            "action",
+            "toggle-pane-embed-or-floating",
+            "-p",
+            formatPaneId(paneId),
+        ],
         "toggle-pane-embed-or-floating",
-        "-p",
-        formatPaneId(paneId),
-    ])
-}
-
-export async function toggleFloatingPanes(
-    pi: ExtensionAPI,
-    session: string,
-    tabId?: number,
-): Promise<void> {
-    const args = ["--session", session, "action", "toggle-floating-panes"]
-    if (tabId !== undefined) args.push("-t", String(tabId))
-    await execZellij(pi, args)
+    )
 }
 
 export async function dumpScreen(
@@ -459,7 +543,7 @@ export async function dumpScreen(
     const args = ["--session", session, "action", "dump-screen", "-p", formatPaneId(paneId)]
     if (opts?.full) args.push("-f")
     if (opts?.ansi) args.push("-a")
-    return execZellij(pi, args)
+    return execZellij(pi, args, "dump-screen")
 }
 
 export async function writeChars(
@@ -468,16 +552,11 @@ export async function writeChars(
     paneId: string,
     text: string,
 ): Promise<void> {
-    await execZellij(pi, [
-        "--session",
-        session,
-        "action",
+    await execZellij(
+        pi,
+        ["--session", session, "action", "write-chars", "-p", formatPaneId(paneId), "--", text],
         "write-chars",
-        "-p",
-        formatPaneId(paneId),
-        "--",
-        text,
-    ])
+    )
 }
 
 export async function sendKeys(
@@ -486,14 +565,9 @@ export async function sendKeys(
     paneId: string,
     keys: string[],
 ): Promise<void> {
-    await execZellij(pi, [
-        "--session",
-        session,
-        "action",
+    await execZellij(
+        pi,
+        ["--session", session, "action", "send-keys", "-p", formatPaneId(paneId), "--", ...keys],
         "send-keys",
-        "-p",
-        formatPaneId(paneId),
-        "--",
-        ...keys,
-    ])
+    )
 }

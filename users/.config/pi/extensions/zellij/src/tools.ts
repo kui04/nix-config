@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs"
 import type { ExtensionAPI, ToolAnnotations } from "@earendil-works/pi-coding-agent"
 import { Type, type Static } from "typebox"
 import {
@@ -10,12 +11,21 @@ import {
     toggleEmbedOrFloating,
     writeChars,
 } from "./cli.ts"
-import type { ZellijSessionManager } from "./session.ts"
-import { indexLivePanesById } from "./types.ts"
+import { readTailFromFile, type ArtifactPaths, type ZellijSessionManager } from "./session.ts"
+import {
+    indexLivePanesById,
+    isRecord,
+    type LayoutMode,
+    type PaneKind,
+    type SplitDirection,
+    type TrackedPane,
+} from "./types.ts"
 import type { PaneWatcher } from "./watcher.ts"
 
 const MAX_READY_PATTERN_LEN = 256
 const MAX_PTY_LINE_BYTES = 3800
+// Reject common nested quantifier patterns like `(a+)+`, `(.*)*`, `([a-z]+){2,}` to avoid ReDoS.
+const NESTED_QUANTIFIER_RE = /\([^)]*[+*][^)]*\)[+*{]/
 
 const runSchema = Type.Object({
     command: Type.String({ description: "Shell command to run in a managed Zellij pane." }),
@@ -265,8 +275,90 @@ const paneOutputSchema = Type.Object({
     output: Type.String(),
 })
 
-function wrapCommandWithTee(command: string, logPath: string): string[] {
-    return ["bash", "-c", `set -o pipefail; { ${command}\n} 2>&1 | tee ${shellQuote(logPath)}`]
+/**
+ * Wrap a shell command so it exports the host Pi `PATH`, tees output to `logPath`,
+ * writes its exact exit status to `exitMarkerPath`, and preserves the exit code.
+ */
+export function wrapCommandWithTee(
+    command: string,
+    logPath: string,
+    exitMarkerPath: string,
+    pathEnv = process.env.PATH,
+): string[] {
+    const pathPrefix = pathEnv ? `export PATH=${shellQuote(pathEnv)}\n` : ""
+    const script = [
+        "set -o pipefail",
+        `${pathPrefix}{ ${command}\n} 2>&1 | tee ${shellQuote(logPath)}`,
+        "rc=$?",
+        `printf '%s\\n' "$rc" > ${shellQuote(exitMarkerPath)}`,
+        'exit "$rc"',
+    ].join("\n")
+    return ["bash", "-c", script]
+}
+
+interface ManagedPaneRequest {
+    kind: PaneKind
+    name: string
+    command: string
+    cwd: string
+    layout: LayoutMode
+    direction?: SplitDirection
+    briefText?: string
+    artifacts?: ArtifactPaths
+    modelLabel?: string
+}
+
+async function runManagedPane(
+    manager: ZellijSessionManager,
+    req: ManagedPaneRequest,
+): Promise<{ pane: TrackedPane; logPath: string; briefPath: string }> {
+    const { logPath, briefPath, exitMarkerPath } =
+        req.artifacts ?? manager.allocateArtifactPaths(req.name)
+    if (req.briefText !== undefined) {
+        manager.writeBriefFile(briefPath, req.briefText)
+    }
+
+    const pane = await manager.spawnInTopology({
+        kind: req.kind,
+        name: req.name,
+        command: wrapCommandWithTee(req.command, logPath, exitMarkerPath),
+        cwd: req.cwd,
+        layout: req.layout,
+        direction: req.direction,
+        notify: true,
+        noFocus: true,
+        logPath,
+        briefPath: req.briefText !== undefined ? briefPath : undefined,
+        exitMarkerPath,
+        modelLabel: req.modelLabel,
+    })
+
+    return { pane, logPath, briefPath }
+}
+
+function findRpcResponseInLog(
+    logPath: string,
+    requestId: string,
+): { success: boolean; error?: string } | null {
+    if (!existsSync(logPath)) return null
+    const tail = readTailFromFile(logPath, 64 * 1024).text
+    for (const line of tail.split(/\r?\n/)) {
+        const trimmed = line.trim()
+        if (!trimmed.startsWith("{")) continue
+        try {
+            const parsed: unknown = JSON.parse(trimmed)
+            if (!isRecord(parsed)) continue
+            if (parsed.type === "response" && parsed.id === requestId) {
+                return {
+                    success: parsed.success === true,
+                    error: typeof parsed.error === "string" ? parsed.error : undefined,
+                }
+            }
+        } catch {
+            // Ignore partial/non-JSON lines.
+        }
+    }
+    return null
 }
 
 const MUTATING_ANNOTATIONS: ToolAnnotations = {
@@ -313,20 +405,13 @@ export function registerZellijTools(
                 "task",
                 40,
             )
-            const { logPath } = manager.allocateArtifactPaths(label)
-            const cwd = params.cwd || ctx.cwd
-            const layout = params.layout ?? "stacked"
-
-            const pane = await manager.spawnInTopology({
+            const { pane, logPath } = await runManagedPane(manager, {
                 kind: "task",
                 name: label,
-                command: wrapCommandWithTee(params.command, logPath),
-                cwd,
-                layout,
+                command: params.command,
+                cwd: params.cwd || ctx.cwd,
+                layout: params.layout ?? "stacked",
                 direction: params.direction,
-                notify: true,
-                noFocus: true,
-                logPath,
             })
 
             const waitMs = Math.round((params.waitSeconds ?? 8) * 1000)
@@ -341,7 +426,7 @@ export function registerZellijTools(
                     `status: exited`,
                     `paneId: ${pane.paneId} (${pane.name})`,
                     `tab: ${pane.tabName} (${pane.layout})`,
-                    `exitCode: ${exitCode ?? "unknown"}`,
+                    `exitCode: ${exitCode !== null ? String(exitCode) : "unknown (pane closed externally or missing exit marker)"}`,
                     `logPath: ${logPath}`,
                     attach ? `attach: ${attach}` : undefined,
                     "",
@@ -397,7 +482,8 @@ export function registerZellijTools(
         name: "zellij_service",
         label: "Zellij Service",
         description:
-            "Manage persistent background services (dev servers, watchers, docker compose, tunnels) in the Zellij services tab.",
+            "Manage persistent background services (dev servers, watchers, docker compose, tunnels) in the Zellij services tab. " +
+            "A service exiting during start (even with code 0) or timing out on readyPattern is treated as a startup failure (`isError: true`).",
         promptSnippet:
             "Start, stop, inspect, or read logs of persistent background services in Zellij",
         promptGuidelines: [
@@ -426,6 +512,11 @@ export function registerZellijTools(
                     if (params.readyPattern.length > MAX_READY_PATTERN_LEN) {
                         throw new Error(`readyPattern exceeds ${MAX_READY_PATTERN_LEN} characters.`)
                     }
+                    if (NESTED_QUANTIFIER_RE.test(params.readyPattern)) {
+                        throw new Error(
+                            `readyPattern "${params.readyPattern}" contains unsafe nested quantifiers.`,
+                        )
+                    }
                     try {
                         readyRegex = new RegExp(params.readyPattern)
                     } catch (err) {
@@ -436,20 +527,19 @@ export function registerZellijTools(
                     }
                 }
 
-                const { logPath } = manager.allocateArtifactPaths(`svc-${serviceName}`)
-                const pane = await manager.spawnInTopology({
+                const artifacts = manager.allocateArtifactPaths(`svc-${serviceName}`)
+                const { pane, logPath } = await runManagedPane(manager, {
                     kind: "service",
                     name: serviceName,
-                    command: wrapCommandWithTee(params.command, logPath),
+                    command: params.command,
                     cwd: params.cwd || ctx.cwd,
                     layout: params.layout ?? "stacked",
                     direction: params.direction,
-                    notify: true,
-                    noFocus: true,
-                    logPath,
+                    artifacts,
                 })
 
-                let readiness: "not_checked" | "ready" | "exited" | "timeout" = "not_checked"
+                let readiness: "not_checked" | "ready" | "exited" | "timeout" | "aborted" =
+                    "not_checked"
                 if (readyRegex) {
                     const timeoutMs = Math.round((params.readyTimeoutSeconds ?? 10) * 1000)
                     readiness = await watcher.waitForReadyPattern(
@@ -490,14 +580,22 @@ export function registerZellijTools(
                         output,
                     },
                     details: undefined,
-                    isError: pane.status === "exited",
+                    isError: pane.status === "exited" || readiness === "timeout",
                 }
             }
 
             if (params.action === "stop") {
-                const closed = await manager.closeTrackedPane(serviceName, "service")
+                await watcher.syncNow()
+                const existing = manager.getPane(serviceName, "service")
+                if (!existing) {
+                    throw new Error(`No tracked service matches "${params.name}".`)
+                }
+                const wasRunning = existing.status === "running"
+                const closed = await manager.closeTrackedPane(existing.paneId, "service")
                 watcher.ensureLoopRunning()
-                const msg = `Stopped service "${closed.name}" (${closed.paneId}).`
+                const msg = wasRunning
+                    ? `Stopped service "${closed.name}" (${closed.paneId}).`
+                    : `Closed already-exited service "${closed.name}" (${closed.paneId}).`
                 return {
                     content: [{ type: "text", text: msg }],
                     structuredContent: {
@@ -514,17 +612,19 @@ export function registerZellijTools(
                 }
             }
 
+            await watcher.syncNow()
             const pane = manager.getPane(serviceName, "service")
             if (!pane) {
                 throw new Error(`No tracked service matches "${params.name}".`)
             }
-            await watcher.syncNow()
 
             if (params.action === "status") {
                 const text = [
                     `service: ${pane.name} (${pane.paneId})`,
                     `status: ${pane.status}`,
-                    pane.exitCode !== undefined ? `exitCode: ${pane.exitCode}` : undefined,
+                    pane.exitCode !== undefined && pane.exitCode !== null
+                        ? `exitCode: ${pane.exitCode}`
+                        : undefined,
                     `tab: ${pane.tabName} (${pane.layout})`,
                     pane.logPath ? `logPath: ${pane.logPath}` : undefined,
                 ]
@@ -587,18 +687,20 @@ export function registerZellijTools(
             )
             const mode = params.mode ?? "one-shot"
             const cwd = params.cwd || ctx.cwd
-            const { logPath, briefPath } = manager.allocateArtifactPaths(label)
-            manager.writeBriefFile(briefPath, params.prompt)
-
             const modelPattern =
                 params.model ?? (ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined)
             const thinkingLevel = params.thinking ?? pi.getThinkingLevel()
-            const toolsList =
+
+            const requestedTools =
                 params.tools && params.tools.length > 0
                     ? params.tools
                     : ["read", "grep", "find", "ls"]
+            // RPC prompts instruct the child to read the brief file, so ensure `read` is enabled.
+            const toolsList =
+                mode === "rpc" && !requestedTools.includes("read")
+                    ? ["read", ...requestedTools]
+                    : requestedTools
 
-            // Mark child pi so it skips loading this Zellij orchestrator extension recursively.
             const piArgs = [
                 "env",
                 "PI_ZELLIJ_SUBAGENT=1",
@@ -615,59 +717,101 @@ export function registerZellijTools(
             if (thinkingLevel) {
                 piArgs.push("--thinking", thinkingLevel)
             }
-            if (mode === "one-shot") {
-                piArgs.push(`@${briefPath}`)
-            }
 
-            const commandStr = piArgs.map(shellQuote).join(" ")
+            // Allocate once and reuse the exact `briefPath` in both the command and `writeBriefFile`.
+            const artifacts = manager.allocateArtifactPaths(label)
+            const effectivePiArgs =
+                mode === "one-shot" ? [...piArgs, `@${artifacts.briefPath}`] : piArgs
+            const commandStr = effectivePiArgs.map(shellQuote).join(" ")
             const modelLabel = modelPattern
                 ? `${modelPattern}${thinkingLevel ? ` (${thinkingLevel})` : ""}`
                 : `default${thinkingLevel ? ` (${thinkingLevel})` : ""}`
 
-            const pane = await manager.spawnInTopology({
+            const { pane, logPath, briefPath } = await runManagedPane(manager, {
                 kind: "agent",
                 name: label,
-                command: wrapCommandWithTee(commandStr, logPath),
+                command: commandStr,
                 cwd,
                 layout: params.layout ?? "stacked",
-                notify: true,
-                noFocus: true,
-                logPath,
-                briefPath,
-                subagentMode: mode,
+                briefText: params.prompt,
+                artifacts,
                 modelLabel,
             })
 
             if (mode === "rpc") {
-                // Wait briefly for child `pi --mode rpc` to enter Running state before sending prompt.
-                for (let i = 0; i < 20; i++) {
-                    await new Promise((resolve) => setTimeout(resolve, 250))
-                    await watcher.syncNow()
-                    if (pane.status !== "running") {
+                try {
+                    // Wait until foreground command in `command_state` becomes `pi` (not `bash -c`).
+                    let piStarted = false
+                    for (let i = 0; i < 20; i++) {
+                        await new Promise((done) => setTimeout(done, 250))
+                        await watcher.syncNow()
+                        if (pane.status !== "running") {
+                            const failOut = await manager
+                                .readPaneOutput(pane, { maxLines: 60 })
+                                .catch(() => "")
+                            throw new Error(
+                                `RPC subagent "${pane.name}" exited before ready (exit ${pane.exitCode ?? "?"}): ${failOut}`,
+                            )
+                        }
+                        const livePanes = await listPanes(pi, manager.getSessionName()).catch(
+                            () => [],
+                        )
+                        const live = livePanes.find((p) => !p.is_plugin && p.id === pane.numericId)
+                        const fgCmd = live?.command_state?.runningCommandText ?? ""
+                        if (/(?:^|\/)pi(?:\s|$)/.test(fgCmd)) {
+                            piStarted = true
+                            break
+                        }
+                    }
+                    if (!piStarted) {
                         const failOut = await manager
                             .readPaneOutput(pane, { maxLines: 60 })
                             .catch(() => "")
                         throw new Error(
-                            `RPC subagent "${pane.name}" exited before ready (exit ${pane.exitCode ?? "?"}): ${failOut}`,
+                            `RPC subagent "${pane.name}" did not become ready${failOut ? `: ${failOut}` : "."}`,
                         )
                     }
-                    const panes = await listPanes(pi, manager.getSessionName()).catch(() => [])
-                    const live = panes.find((p) => !p.is_plugin && p.id === pane.numericId)
-                    if (live?.pane_command?.includes("pi")) break
+
+                    const rpcPrompt = JSON.stringify({
+                        id: "1",
+                        type: "prompt",
+                        message: `Read ${briefPath} and follow all instructions in it.`,
+                    })
+                    if (Buffer.byteLength(rpcPrompt, "utf8") > MAX_PTY_LINE_BYTES) {
+                        throw new Error(
+                            "RPC prompt envelope exceeds canonical PTY line buffer limit.",
+                        )
+                    }
+
+                    await writeChars(pi, manager.getSessionName(), pane.paneId, rpcPrompt)
+                    await sendKeys(pi, manager.getSessionName(), pane.paneId, ["Enter"])
+
+                    // Verify `pi --mode rpc` acknowledged prompt `"1"`.
+                    let acked: { success: boolean; error?: string } | null = null
+                    for (let i = 0; i < 20; i++) {
+                        acked = findRpcResponseInLog(logPath, "1")
+                        if (acked) break
+                        await new Promise((done) => setTimeout(done, 250))
+                        await watcher.syncNow()
+                        if (pane.status !== "running") break
+                    }
+                    if (!acked) {
+                        throw new Error(
+                            `RPC subagent "${pane.name}" did not acknowledge initial prompt.`,
+                        )
+                    }
+                    if (!acked.success) {
+                        throw new Error(
+                            `RPC subagent "${pane.name}" rejected prompt: ${acked.error ?? "unknown error"}`,
+                        )
+                    }
+                } catch (err) {
+                    await manager.closeTrackedPane(pane.paneId).catch(() => {})
+                    watcher.ensureLoopRunning()
+                    throw err
                 }
 
-                const rpcPrompt = JSON.stringify({
-                    id: "1",
-                    type: "prompt",
-                    message: `Read ${briefPath} and follow all instructions in it.`,
-                })
-                if (Buffer.byteLength(rpcPrompt, "utf8") > MAX_PTY_LINE_BYTES) {
-                    throw new Error("RPC prompt envelope exceeds canonical PTY line buffer limit.")
-                }
-                await writeChars(pi, manager.getSessionName(), pane.paneId, rpcPrompt)
-                await sendKeys(pi, manager.getSessionName(), pane.paneId, ["Enter"])
                 watcher.ensureLoopRunning()
-
                 const text = [
                     `status: rpc_running`,
                     `paneId: ${pane.paneId} (${pane.name})`,
@@ -765,7 +909,12 @@ export function registerZellijTools(
         async execute(_toolCallId, params: Static<typeof replSchema>, _signal, _onUpdate, ctx) {
             const label = sanitizeIdentifier(params.name ?? "repl", "repl", 40)
             const shell = process.env.SHELL || "bash"
-            const cmd = params.command?.trim() ? ["bash", "-c", params.command] : [shell]
+            const pathPrefix = process.env.PATH
+                ? `export PATH=${shellQuote(process.env.PATH)}; `
+                : ""
+            const cmd = params.command?.trim()
+                ? ["bash", "-c", `${pathPrefix}${params.command}`]
+                : [shell]
 
             const pane = await manager.spawnInTopology({
                 kind: "repl",
@@ -852,15 +1001,20 @@ export function registerZellijTools(
             }
 
             if (params.action === "sweep") {
-                const { closed, keptRunning } = await manager.sweep({
+                const { closed, keptRunning, failed } = await manager.sweep({
                     killRunning: params.killRunning ?? false,
                 })
                 watcher.ensureLoopRunning()
-                const msg = `Closed ${closed.length} pane(s); ${keptRunning.length} still running.`
+                const baseMsg = `Closed ${closed.length} pane(s); ${keptRunning.length} still running.`
+                const msg =
+                    failed.length > 0
+                        ? `${baseMsg} Failed to close ${failed.length}: ${failed.map((f) => `${f.pane.paneId} (${f.error})`).join(", ")}`
+                        : baseMsg
                 return {
                     content: [{ type: "text", text: msg }],
                     structuredContent: { action: "sweep", paneId: null, output: msg },
                     details: undefined,
+                    isError: failed.length > 0,
                 }
             }
 
@@ -876,27 +1030,28 @@ export function registerZellijTools(
             switch (params.action) {
                 case "read": {
                     await watcher.syncNow()
-                    if (params.ansi) {
-                        const out = (
+                    const out = await manager.readPaneOutput(target, {
+                        full: params.full ?? false,
+                        ansi: params.ansi ?? false,
+                        maxLines: params.maxLines ?? 120,
+                    })
+                    if (!out) {
+                        const screenOut = (
                             await dumpScreen(pi, session, target.paneId, {
-                                full: params.full ?? true,
-                                ansi: true,
+                                full: params.full ?? false,
+                                ansi: params.ansi ?? false,
                             })
                         ).trimEnd()
                         return {
-                            content: [{ type: "text", text: out || "(empty screen)" }],
+                            content: [{ type: "text", text: screenOut || "(empty screen)" }],
                             structuredContent: {
                                 action: "read",
                                 paneId: target.paneId,
-                                output: out,
+                                output: screenOut,
                             },
                             details: undefined,
                         }
                     }
-                    const out = await manager.readPaneOutput(target, {
-                        full: params.full ?? false,
-                        maxLines: params.maxLines ?? 120,
-                    })
                     return {
                         content: [{ type: "text", text: out || "(no output)" }],
                         structuredContent: {
@@ -940,6 +1095,9 @@ export function registerZellijTools(
                 case "keys": {
                     if (!params.keys || params.keys.length === 0) {
                         throw new Error('"keys" is required for action "keys".')
+                    }
+                    if (params.keys.some((k) => k.trim().length === 0)) {
+                        throw new Error('"keys" cannot contain empty key names.')
                     }
                     await watcher.syncNow()
                     if (target.status !== "running") {
