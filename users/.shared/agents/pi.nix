@@ -61,7 +61,6 @@ in
   # pi-specific configuration
   home.file.".pi/agent/extensions".source = "${config}/extensions";
   home.file.".pi/agent/pi-permissions.jsonc".source = "${config}/pi-permissions.jsonc";
-  home.file.".pi/agent/zentui.json".source = "${config}/zentui.json";
   home.file.".pi/agent/npm/.npmrc".source = "${config}/.npmrc";
   home.file."Templates/pi-mcp.json".source = "${config}/mcp-template.json";
 
