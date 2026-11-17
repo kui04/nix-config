@@ -1,0 +1,7 @@
+# devenv state and local overrides
+.devenv*
+devenv.local.nix
+devenv.local.yaml
+
+# npm
+node_modules

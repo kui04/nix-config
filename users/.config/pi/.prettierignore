@@ -1,0 +1,10 @@
+node_modules
+.devenv
+devenv.lock
+package-lock.json
+
+# pi runtime configuration, not part of this project
+settings.json
+pi-permissions.jsonc
+zentui.json
+mcp-template.json

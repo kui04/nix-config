@@ -1,0 +1,5 @@
+# nixpkgs fork that devenv itself builds against; its binaries come prebuilt
+# from the devenv cachix cache.
+inputs:
+    nixpkgs:
+        url: github:cachix/devenv-nixpkgs/rolling
