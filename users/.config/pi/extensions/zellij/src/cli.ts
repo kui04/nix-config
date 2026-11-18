@@ -104,13 +104,14 @@ export function parsePaneNumericId(rawPaneId: string): number {
     return parseInt(match[1], 10)
 }
 
-async function execZellij(
+async function execChecked(
     pi: ExtensionAPI,
+    command: string,
     args: string[],
     label: string,
     timeoutMs = CLI_TIMEOUT_MS,
 ): Promise<string> {
-    const res = await pi.exec("zellij", args, { timeout: timeoutMs })
+    const res = await pi.exec(command, args, { timeout: timeoutMs })
     if (res.killed) {
         throw new Error(`zellij ${label} timed out after ${timeoutMs}ms`)
     }
@@ -119,6 +120,15 @@ async function execZellij(
         throw new Error(`zellij ${label} failed: ${msg}`)
     }
     return res.stdout
+}
+
+async function execZellij(
+    pi: ExtensionAPI,
+    args: string[],
+    label: string,
+    timeoutMs = CLI_TIMEOUT_MS,
+): Promise<string> {
+    return execChecked(pi, "zellij", args, label, timeoutMs)
 }
 
 /** Probe `zellij --version` and ensure >= 0.45.0 is available in PATH. */
@@ -178,17 +188,22 @@ export async function listSessions(pi: ExtensionAPI): Promise<string[]> {
     return parseListSessionsOutput(res.stdout)
 }
 
-export async function activeClientCount(pi: ExtensionAPI, session: string): Promise<number> {
+async function listClientRows(pi: ExtensionAPI, session: string): Promise<string[] | null> {
     const res = await pi.exec("zellij", ["--session", session, "action", "list-clients"], {
         timeout: 5_000,
     })
-    if (res.killed || res.code !== 0) return 0
+    if (res.killed || res.code !== 0) return null
     const lines = res.stdout
         .split(/\r?\n/)
         .map((line) => line.trim())
         .filter((line) => line.length > 0)
     // Output always includes a header row when any query succeeds.
-    return Math.max(0, lines.length - 1)
+    return lines.slice(1)
+}
+
+export async function activeClientCount(pi: ExtensionAPI, session: string): Promise<number> {
+    const rows = await listClientRows(pi, session)
+    return rows ? rows.length : 0
 }
 
 export async function ensureBackgroundSession(pi: ExtensionAPI, session: string): Promise<void> {
@@ -569,5 +584,91 @@ export async function sendKeys(
         pi,
         ["--session", session, "action", "send-keys", "-p", formatPaneId(paneId), "--", ...keys],
         "send-keys",
+    )
+}
+
+export async function markPaneSeen(
+    pi: ExtensionAPI,
+    session: string,
+    paneId: string,
+): Promise<void> {
+    await execZellij(
+        pi,
+        ["--session", session, "action", "mark-pane-seen", "-p", formatPaneId(paneId)],
+        "mark-pane-seen",
+    )
+}
+
+export async function resolveUserClientPaneId(
+    pi: ExtensionAPI,
+    session: string,
+    fallbackPaneId?: string | number,
+): Promise<number | null> {
+    const clientRows = await listClientRows(pi, session)
+    if (!clientRows) return null
+    const helperCount = activeHelperClients.has(session) ? 1 : 0
+    if (clientRows.length <= helperCount) return null
+
+    if (process.env.ZELLIJ_SESSION_NAME?.trim() === session) {
+        const envPane = process.env.ZELLIJ_PANE_ID?.trim()
+        if (envPane && /^\d+$/.test(envPane)) {
+            return parseInt(envPane, 10)
+        }
+    }
+
+    const lastRow = clientRows.at(-1)
+    if (lastRow) {
+        const cols = lastRow.split(/\s+/)
+        const colMatch = cols[1]?.match(/^(?:terminal_)?(\d+)$/)
+        if (colMatch) {
+            return parseInt(colMatch[1], 10)
+        }
+    }
+
+    if (fallbackPaneId !== undefined) {
+        return parsePaneNumericId(String(fallbackPaneId))
+    }
+    return null
+}
+
+export async function promptNotify(
+    pi: ExtensionAPI,
+    session: string,
+    message: string,
+    opts?: { title?: string; timeout?: string; at?: string; paneId?: string | number },
+): Promise<void> {
+    const targetPaneId = await resolveUserClientPaneId(pi, session, opts?.paneId)
+    if (targetPaneId === null) return
+
+    const args = [
+        "--session",
+        session,
+        "prompt",
+        "notify",
+        "--no-pane-name",
+        "--no-tab-name",
+        "--at",
+        opts?.at ?? "top-right",
+        "--timeout",
+        opts?.timeout ?? "8s",
+    ]
+    if (opts?.title) {
+        args.push("--title", opts.title)
+    }
+    args.push("--", message)
+
+    if (
+        process.env.ZELLIJ_SESSION_NAME?.trim() === session &&
+        process.env.ZELLIJ_PANE_ID?.trim() === String(targetPaneId)
+    ) {
+        await execZellij(pi, args, "prompt notify")
+        return
+    }
+
+    await execChecked(
+        pi,
+        "env",
+        [`ZELLIJ_PANE_ID=${targetPaneId}`, "zellij", ...args],
+        "prompt notify",
     )
 }

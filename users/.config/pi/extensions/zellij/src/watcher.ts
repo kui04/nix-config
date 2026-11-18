@@ -1,8 +1,13 @@
 import { spawn, type ChildProcess } from "node:child_process"
 import { existsSync, statSync, watch, type FSWatcher } from "node:fs"
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent"
-import { listPanes, listSessions } from "./cli.ts"
-import { readExitMarker, readTailFromFile, type ZellijSessionManager } from "./session.ts"
+import { listPanes, listSessions, markPaneSeen, promptNotify } from "./cli.ts"
+import {
+    readExitMarker,
+    readTailFromFile,
+    sanitizeAsciiText,
+    type ZellijSessionManager,
+} from "./session.ts"
 import {
     indexLivePanesById,
     isRecord,
@@ -27,11 +32,17 @@ function formatDuration(ms: number): string {
     return `${mins}m${rem}s`
 }
 
+function charDisplayWidth(ch: string): number {
+    if (ch === "\t") return 3
+    const cp = ch.codePointAt(0) ?? 0
+    if (cp < 0x20 || (cp >= 0x7f && cp <= 0x9f)) return 0
+    return cp > 0xff ? 2 : 1
+}
+
 function stringDisplayWidth(text: string): number {
     let cols = 0
     for (const ch of text) {
-        const cp = ch.codePointAt(0) ?? 0
-        cols += cp > 0xff ? 2 : 1
+        cols += charDisplayWidth(ch)
     }
     return cols
 }
@@ -43,12 +54,49 @@ function fitPlain(text: string, maxCols: number): string {
     let out = ""
     let cols = 0
     for (const ch of text) {
-        const w = (ch.codePointAt(0) ?? 0) > 0xff ? 2 : 1
+        const w = charDisplayWidth(ch)
         if (cols + w > target) break
         out += ch
         cols += w
     }
     return maxCols <= 3 ? out : `${out}...`
+}
+
+function formatPaneWidgetParts(pane: TrackedPane): {
+    badgePlain: string
+    badgeColor: "warning" | "accent" | "success" | "error"
+    safeKind: string
+    safeName: string
+    headPlain: string
+    metaPlain: string
+} {
+    const elapsed = formatDuration((pane.endedAt ?? Date.now()) - pane.startedAt)
+    const badgePlain =
+        pane.status === "running" && pane.needsAttention
+            ? `[input ${elapsed}]`
+            : pane.status === "running"
+              ? `[run ${elapsed}]`
+              : pane.exitCode === 0
+                ? `[ok ${elapsed}]`
+                : `[err:${pane.exitCode ?? "?"} ${elapsed}]`
+    const badgeColor =
+        pane.status === "running" && pane.needsAttention
+            ? "warning"
+            : pane.status === "running"
+              ? "accent"
+              : pane.exitCode === 0
+                ? "success"
+                : "error"
+    const safeKind = sanitizeAsciiText(pane.kind, 16) || "pane"
+    const safeName = sanitizeAsciiText(pane.name, 48) || "pane"
+    const safePaneId = sanitizeAsciiText(pane.paneId, 48) || "pane"
+    const tabLabel = sanitizeAsciiText(pane.tabName, 48) || "tab"
+    const outputPreview = pane.lastOutputLine ? sanitizeAsciiText(pane.lastOutputLine, 200) : ""
+    const headPlain = `${badgePlain} ${safeKind}:${safeName}`
+    const metaPlain = outputPreview
+        ? ` | ${outputPreview}`
+        : ` (${safePaneId} @ ${tabLabel}/${pane.layout})`
+    return { badgePlain, badgeColor, safeKind, safeName, headPlain, metaPlain }
 }
 
 interface WaitEntry {
@@ -75,8 +123,11 @@ export class PaneWatcher {
     private generation = 0
     private consecutiveSyncErrors = 0
     private suppressedNotifyPanes = new Set<string>()
+    private markSeenInFlight = new Set<string>()
     private exitWaiters = new Map<string, Set<WaitEntry>>()
     private activeSubscribers = new Set<ChildProcess>()
+    private lastStatusText: string | undefined | null = null
+    private lastPlainWidgetKey: string | null = null
 
     constructor(pi: ExtensionAPI, manager: ZellijSessionManager) {
         this.pi = pi
@@ -88,6 +139,11 @@ export class PaneWatcher {
         this.generation += 1
         this.consecutiveSyncErrors = 0
         this.closedSubRetries = 0
+        this.inFlightSync = undefined
+        this.syncQueued = false
+        this.markSeenInFlight.clear()
+        this.lastStatusText = null
+        this.lastPlainWidgetKey = null
     }
 
     ensureLoopRunning(): void {
@@ -277,6 +333,9 @@ export class PaneWatcher {
         }
         this.activeSubscribers.clear()
         this.suppressedNotifyPanes.clear()
+        this.markSeenInFlight.clear()
+        this.lastStatusText = null
+        this.lastPlainWidgetKey = null
         for (const set of this.exitWaiters.values()) {
             for (const entry of set) {
                 entry.resolve(false)
@@ -284,6 +343,33 @@ export class PaneWatcher {
         }
         this.exitWaiters.clear()
         this.manager.releaseSessionClient()
+    }
+
+    private applyStatus(
+        ctx: { ui: { setStatus: (k: string, t: string | undefined) => void } },
+        text: string | undefined,
+    ): void {
+        if (this.lastStatusText === text) return
+        this.lastStatusText = text
+        ctx.ui.setStatus("zellij", text)
+    }
+
+    private applyPlainWidget(
+        ctx: {
+            ui: {
+                setWidget: (
+                    k: string,
+                    c: string[] | undefined,
+                    o?: { placement?: "aboveEditor" | "belowEditor" },
+                ) => void
+            }
+        },
+        rows: string[] | undefined,
+    ): void {
+        const key = rows ? JSON.stringify(rows) : "__undefined__"
+        if (this.lastPlainWidgetKey === key) return
+        this.lastPlainWidgetKey = key
+        ctx.ui.setWidget("zellij-panes", rows, rows ? { placement: "aboveEditor" } : undefined)
     }
 
     refreshUI(): void {
@@ -294,18 +380,23 @@ export class PaneWatcher {
         const panes = this.manager.getTrackedPanes()
         if (panes.length === 0) {
             const attachHint = this.manager.getAttachHint()
-            ctx.ui.setStatus(
-                "zellij",
+            this.applyStatus(
+                ctx,
                 attachHint ? `zj:${this.manager.getSessionName()} (${attachHint})` : undefined,
             )
-            ctx.ui.setWidget("zellij-panes", undefined)
+            this.applyPlainWidget(ctx, undefined)
             return
         }
 
         const counts = { task: 0, service: 0, agent: 0, repl: 0 }
+        let inputCount = 0
+        let errCount = 0
         for (const p of panes) {
             if (p.status === "running") {
                 counts[p.kind] += 1
+                if (p.needsAttention) inputCount += 1
+            } else if (p.status === "exited" && p.kind !== "repl" && p.exitCode !== 0) {
+                errCount += 1
             }
         }
 
@@ -314,67 +405,69 @@ export class PaneWatcher {
         if (counts.service > 0) summaryParts.push(`svc:${counts.service}`)
         if (counts.agent > 0) summaryParts.push(`agents:${counts.agent}`)
         if (counts.repl > 0) summaryParts.push(`repl:${counts.repl}`)
+        if (inputCount > 0) summaryParts.push(`input:${inputCount}`)
+        if (errCount > 0) summaryParts.push(`err:${errCount}`)
         if (summaryParts.length === 0) summaryParts.push(`done:${panes.length}`)
 
         const attachHint = this.manager.getAttachHint()
         const statusText = attachHint
             ? `zj:${this.manager.getSessionName()} [${summaryParts.join(" ")}] | ${attachHint}`
             : `zj [${summaryParts.join(" ")}]`
-        ctx.ui.setStatus("zellij", statusText)
+        this.applyStatus(ctx, statusText)
+
+        const visiblePanes = panes.filter(
+            (p) =>
+                p.status === "running" ||
+                (p.status === "exited" && p.kind !== "repl" && p.exitCode !== 0),
+        )
+        if (visiblePanes.length === 0) {
+            this.applyPlainWidget(ctx, undefined)
+            return
+        }
+
+        const maxItems =
+            visiblePanes.length > MAX_WIDGET_ROWS ? MAX_WIDGET_ROWS - 1 : visiblePanes.length
+        const displayedPanes = visiblePanes.slice(0, maxItems)
+        for (const p of displayedPanes) {
+            if (p.lastOutputLine === undefined) {
+                p.lastOutputLine = this.manager.readLastOutputLine(p)
+            }
+        }
 
         if (ctx.mode !== "tui") {
-            const maxItems = panes.length > MAX_WIDGET_ROWS ? MAX_WIDGET_ROWS - 1 : panes.length
-            const plainRows = panes.slice(0, maxItems).map((p) => {
-                const badge =
-                    p.status === "running"
-                        ? "[run]"
-                        : p.exitCode === 0
-                          ? "[ok]"
-                          : `[err:${p.exitCode ?? "?"}]`
-                const elapsed = formatDuration((p.endedAt ?? Date.now()) - p.startedAt)
-                return `${badge} ${p.kind}:${p.name} (${p.paneId} @ ${p.tabName}/${p.layout}, ${elapsed})`
+            const plainRows = displayedPanes.map((p) => {
+                const { headPlain, metaPlain } = formatPaneWidgetParts(p)
+                return `${headPlain}${metaPlain}`
             })
-            if (panes.length > MAX_WIDGET_ROWS) {
-                plainRows.push(`+${panes.length - maxItems} more; run /zellij`)
+            if (visiblePanes.length > MAX_WIDGET_ROWS) {
+                plainRows.push(`+${visiblePanes.length - maxItems} more; run /zellij`)
             }
-            ctx.ui.setWidget("zellij-panes", plainRows, { placement: "aboveEditor" })
+            this.applyPlainWidget(ctx, plainRows)
             return
         }
 
         // Snapshot rows and render via a component factory so we control colors and avoid
         // the built-in `Text(line, 1, 0)` left padding added for plain string arrays.
-        const snapshot = panes.slice()
+        this.lastPlainWidgetKey = null
+        const snapshot = visiblePanes.map((p) => ({ ...p }))
         ctx.ui.setWidget(
             "zellij-panes",
             (_tui, theme) => ({
                 invalidate() {},
                 render(width: number): string[] {
-                    const maxItems =
+                    const rowCap =
                         snapshot.length > MAX_WIDGET_ROWS ? MAX_WIDGET_ROWS - 1 : snapshot.length
                     const lines: string[] = []
-                    for (const p of snapshot.slice(0, maxItems)) {
-                        const badgePlain =
-                            p.status === "running"
-                                ? "[run]"
-                                : p.exitCode === 0
-                                  ? "[ok]"
-                                  : `[err:${p.exitCode ?? "?"}]`
-                        const badge =
-                            p.status === "running"
-                                ? theme.fg("accent", badgePlain)
-                                : p.exitCode === 0
-                                  ? theme.fg("success", badgePlain)
-                                  : theme.fg("error", badgePlain)
-
+                    for (const p of snapshot.slice(0, rowCap)) {
+                        const { badgePlain, badgeColor, safeKind, safeName, headPlain, metaPlain } =
+                            formatPaneWidgetParts(p)
+                        const badge = theme.fg(badgeColor, badgePlain)
                         const kindColor =
                             p.kind === "service"
                                 ? "warning"
                                 : p.kind === "agent"
                                   ? "accent"
                                   : "toolTitle"
-                        const elapsed = formatDuration((p.endedAt ?? Date.now()) - p.startedAt)
-                        const metaPlain = ` (${p.paneId} @ ${p.tabName}/${p.layout}, ${elapsed})`
-                        const headPlain = `${badgePlain} ${p.kind}:${p.name}`
                         const headCols = stringDisplayWidth(headPlain)
 
                         if (headCols >= width) {
@@ -383,10 +476,10 @@ export class PaneWatcher {
                         }
 
                         const remaining = Math.max(0, width - headCols)
-                        const styledKind = theme.fg(kindColor, p.kind)
-                        const styledName = theme.bold(theme.fg("text", p.name))
+                        const styledKind = theme.fg(kindColor, safeKind)
+                        const styledName = theme.bold(theme.fg("text", safeName))
                         const styledMeta =
-                            remaining > 4 ? theme.fg("muted", fitPlain(metaPlain, remaining)) : ""
+                            remaining > 6 ? theme.fg("muted", fitPlain(metaPlain, remaining)) : ""
                         lines.push(`${badge} ${styledKind}:${styledName}${styledMeta}`)
                     }
 
@@ -420,10 +513,13 @@ export class PaneWatcher {
             }
         }
 
-        this.inFlightSync = run().finally(() => {
-            this.inFlightSync = undefined
+        const syncPromise = run().finally(() => {
+            if (this.inFlightSync === syncPromise) {
+                this.inFlightSync = undefined
+            }
         })
-        return this.inFlightSync
+        this.inFlightSync = syncPromise
+        return syncPromise
     }
 
     /** Reconcile tracked pane state with live Zellij panes. Accessible directly for testing. */
@@ -487,7 +583,7 @@ export class PaneWatcher {
             let dirtyPersist = false
             for (const pane of tracked) {
                 if (this.disposed || gen !== this.generation) return
-                if (pane.status === "closed") continue
+                if (pane.status === "closed" || this.manager.isClosingPane(pane.paneId)) continue
                 const live = liveById.get(pane.numericId)
 
                 if (!live) {
@@ -502,7 +598,14 @@ export class PaneWatcher {
                                   .readPaneOutput(pane, { maxLines: 80 })
                                   .catch(() => "(unable to read output)")
                             : ""
-                    if (this.disposed || gen !== this.generation) return
+                    if (
+                        this.disposed ||
+                        gen !== this.generation ||
+                        this.manager.isClosingPane(pane.paneId) ||
+                        this.manager.getPane(pane.paneId) !== pane
+                    ) {
+                        continue
+                    }
 
                     pane.status = "closed"
                     pane.endedAt = pane.endedAt ?? Date.now()
@@ -541,14 +644,19 @@ export class PaneWatcher {
                     pane.status = "exited"
                     pane.exitCode = resolvedExit
                     pane.endedAt = Date.now()
+                    pane.needsAttention = false
+                    pane.lastOutputLine =
+                        this.manager.readLastOutputLine(pane) ?? pane.lastOutputLine
                     dirtyPersist = true
                     this.resolveWaiters(pane.paneId, true)
+                    this.markPaneSeenOnCleanExit(pane)
 
-                    if (
-                        pane.kind !== "repl" &&
-                        !pane.notifiedCompletion &&
-                        !this.suppressedNotifyPanes.has(pane.paneId)
-                    ) {
+                    if (pane.kind === "repl") {
+                        pane.notifiedCompletion = true
+                        continue
+                    }
+
+                    if (!pane.notifiedCompletion && !this.suppressedNotifyPanes.has(pane.paneId)) {
                         pane.notifiedCompletion = true
                         const tail = await this.manager
                             .readPaneOutput(pane, { maxLines: 80 })
@@ -561,10 +669,16 @@ export class PaneWatcher {
                     continue
                 }
 
-                if (!live.exited && pane.status === "running" && pane.kind !== "repl") {
-                    const updated = await this.checkNeedsAttention(pane, live)
-                    if (this.disposed || gen !== this.generation) return
-                    if (updated) dirtyPersist = true
+                if (!live.exited && pane.status === "running") {
+                    if (pane.kind !== "repl") {
+                        const updated = await this.checkNeedsAttention(pane, live, gen)
+                        if (this.disposed || gen !== this.generation) return
+                        if (updated) dirtyPersist = true
+                    }
+                    if (!pane.needsAttention) {
+                        pane.lastOutputLine =
+                            this.manager.readLastOutputLine(pane) ?? pane.lastOutputLine
+                    }
                 }
             }
 
@@ -578,15 +692,32 @@ export class PaneWatcher {
         }
     }
 
-    private async checkNeedsAttention(pane: TrackedPane, live: ZellijPaneJson): Promise<boolean> {
+    private async checkNeedsAttention(
+        pane: TrackedPane,
+        live: ZellijPaneJson,
+        gen = this.generation,
+    ): Promise<boolean> {
         if (this.suppressedNotifyPanes.has(pane.paneId) || this.disposed) return false
 
         const attStatus = live.attention?.status ?? "Idle"
+        const isWatchQuiet =
+            (live.attention?.from_watch === true || live.attention?.source === "Watch") &&
+            live.attention?.text === "went quiet"
         const blockedProgram = live.program_status?.find((ps) => ps.state === "Blocked")
-        const isNeedsYou = attStatus === "NeedsYou" || blockedProgram !== undefined
-        const isQuietWatch = attStatus === "Quiet"
+        const isNeedsYou =
+            (attStatus === "NeedsYou" && !isWatchQuiet) || blockedProgram !== undefined
+        const isQuietWatch = attStatus === "Quiet" || (attStatus === "NeedsYou" && isWatchQuiet)
 
-        if (!isNeedsYou && !isQuietWatch) return false
+        if (!isNeedsYou && !isQuietWatch) {
+            const hadSignature = pane.lastAttentionSignature !== undefined
+            pane.lastAttentionSignature = undefined
+            if (pane.needsAttention) {
+                pane.needsAttention = false
+                pane.lastOutputLine = this.manager.readLastOutputLine(pane)
+                return true
+            }
+            return hadSignature
+        }
 
         const signature = `${attStatus}:${live.attention?.changed_ms ?? 0}:${blockedProgram !== undefined ? "blocked" : ""}`
         if (pane.lastAttentionSignature === signature) return false
@@ -598,14 +729,35 @@ export class PaneWatcher {
         const tail = await this.manager
             .readPaneOutput(pane, { maxLines: 25, preferScreen: true, full: false })
             .catch(() => "")
-        if (this.disposed) return true
+        if (this.disposed || gen !== this.generation) return false
 
         const looksLikePrompt =
             isNeedsYou ||
             INTERACTIVE_PROMPT_RE.test(tail.split(/\r?\n/).slice(-3).join("\n").trimEnd())
-        if (!looksLikePrompt) return true
+        if (!looksLikePrompt) {
+            pane.needsAttention = false
+            pane.lastOutputLine = this.manager.readLastOutputLine(pane)
+            return true
+        }
+
+        pane.needsAttention = true
+        pane.markedSeen = false
+        const lastPromptLine = tail
+            .split(/\r?\n/)
+            .map((line) => sanitizeAsciiText(line, 200))
+            .filter(Boolean)
+            .pop()
+        if (lastPromptLine) {
+            pane.lastOutputLine = lastPromptLine
+        }
 
         this.emitFollowUp(pane, "needs_attention", null, tail)
+        void promptNotify(
+            this.pi,
+            this.manager.getSessionName(),
+            `${pane.kind}:${pane.name} (${pane.paneId}) is waiting for input.`,
+            { title: "Pi Zellij", timeout: "8s", at: "top-right", paneId: pane.paneId },
+        ).catch(() => {})
         return true
     }
 
@@ -665,6 +817,36 @@ export class PaneWatcher {
         }
     }
 
+    private markPaneSeenOnCleanExit(pane: TrackedPane): void {
+        if (
+            pane.markedSeen ||
+            this.markSeenInFlight.has(pane.paneId) ||
+            pane.exitCode !== 0 ||
+            (pane.kind !== "task" && pane.kind !== "agent" && pane.kind !== "repl")
+        ) {
+            return
+        }
+        this.markSeenInFlight.add(pane.paneId)
+        void markPaneSeen(this.pi, this.manager.getSessionName(), pane.paneId)
+            .then(() => {
+                pane.markedSeen = true
+            })
+            .catch(() => {})
+            .finally(() => {
+                this.markSeenInFlight.delete(pane.paneId)
+            })
+    }
+
+    private markExitedPaneHandled(pane: TrackedPane): void {
+        if (pane.status !== "exited") return
+        pane.needsAttention = false
+        this.markPaneSeenOnCleanExit(pane)
+        if (!pane.notifiedCompletion) {
+            pane.notifiedCompletion = true
+            this.manager.markPaneUpdated()
+        }
+    }
+
     /**
      * Wait up to `timeoutMs` for a pane to exit while suppressing duplicate
      * background followUp notifications during the synchronous wait window.
@@ -689,9 +871,8 @@ export class PaneWatcher {
                 gen !== this.generation ||
                 pane.status !== "running"
             ) {
-                if (pane.status !== "running" && !pane.notifiedCompletion) {
-                    pane.notifiedCompletion = true
-                    this.manager.markPaneUpdated()
+                if (!this.disposed && gen === this.generation && pane.status === "exited") {
+                    this.markExitedPaneHandled(pane)
                 }
                 return { exited: pane.status !== "running", pane }
             }
@@ -730,10 +911,7 @@ export class PaneWatcher {
                 !this.disposed &&
                 gen === this.generation
             ) {
-                if (!pane.notifiedCompletion) {
-                    pane.notifiedCompletion = true
-                    this.manager.markPaneUpdated()
-                }
+                this.markExitedPaneHandled(pane)
                 return { exited: true, pane }
             }
             return { exited: false, pane }

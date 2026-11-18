@@ -5,6 +5,7 @@ import {
     dumpScreen,
     focusPane,
     listPanes,
+    markPaneSeen,
     sanitizeIdentifier,
     sendKeys,
     shellQuote,
@@ -303,6 +304,7 @@ interface ManagedPaneRequest {
     cwd: string
     layout: LayoutMode
     direction?: SplitDirection
+    notify?: boolean
     briefText?: string
     artifacts?: ArtifactPaths
     modelLabel?: string
@@ -325,7 +327,7 @@ async function runManagedPane(
         cwd: req.cwd,
         layout: req.layout,
         direction: req.direction,
-        notify: true,
+        notify: req.notify ?? req.kind !== "service",
         noFocus: true,
         logPath,
         briefPath: req.briefText !== undefined ? briefPath : undefined,
@@ -373,6 +375,19 @@ const PANE_ANNOTATIONS: ToolAnnotations = {
     destructiveHint: true,
     idempotentHint: false,
     openWorldHint: false,
+}
+
+function clearAttentionAfterInput(
+    manager: ZellijSessionManager,
+    watcher: PaneWatcher,
+    target: TrackedPane,
+): void {
+    if (target.needsAttention) {
+        target.needsAttention = false
+        target.lastOutputLine = manager.readLastOutputLine(target)
+        manager.markPaneUpdated()
+    }
+    watcher.refreshUI()
 }
 
 /** Register all Zellij orchestration tools on the Pi extension API. */
@@ -733,6 +748,7 @@ export function registerZellijTools(
                 command: commandStr,
                 cwd,
                 layout: params.layout ?? "stacked",
+                notify: mode !== "rpc",
                 briefText: params.prompt,
                 artifacts,
                 modelLabel,
@@ -962,6 +978,9 @@ export function registerZellijTools(
         description:
             "Inspect, read output from, send input/keys to, focus, float/embed, close, or sweep managed Zellij panes.",
         promptSnippet: "List, read, send input/keys, float, focus, close, or sweep Zellij panes",
+        promptGuidelines: [
+            'Successful one-shot tasks and subagents close automatically after the turn settles; use zellij_pane(action="sweep") or action="close" to clean up failed panes or finished RPC subagents.',
+        ],
         parameters: paneSchema,
         outputSchema: paneOutputSchema,
         annotations: PANE_ANNOTATIONS,
@@ -1077,10 +1096,12 @@ export function registerZellijTools(
                             `Input exceeds canonical PTY line limit (${MAX_PTY_LINE_BYTES} bytes).`,
                         )
                     }
+                    await markPaneSeen(pi, session, target.paneId).catch(() => {})
                     await writeChars(pi, session, target.paneId, params.text)
                     if (!params.raw) {
                         await sendKeys(pi, session, target.paneId, ["Enter"])
                     }
+                    clearAttentionAfterInput(manager, watcher, target)
                     const msg = `Sent input to ${target.paneId} (${target.name}).`
                     return {
                         content: [{ type: "text", text: msg }],
@@ -1105,7 +1126,9 @@ export function registerZellijTools(
                             `Cannot send keys to ${target.paneId} (${target.name}): status is ${target.status}.`,
                         )
                     }
+                    await markPaneSeen(pi, session, target.paneId).catch(() => {})
                     await sendKeys(pi, session, target.paneId, params.keys)
+                    clearAttentionAfterInput(manager, watcher, target)
                     const msg = `Sent keys [${params.keys.join(", ")}] to ${target.paneId}.`
                     return {
                         content: [{ type: "text", text: msg }],

@@ -25,6 +25,7 @@ import {
     listPanes,
     listSessions,
     listTabs,
+    markPaneSeen,
     newPane,
     newTab,
     releasePersistentClient,
@@ -56,9 +57,12 @@ const MAX_TAIL_READ_BYTES = 512 * 1024
 const MAX_FULL_READ_BYTES = 2 * 1024 * 1024
 const MAX_TAIL_OUTPUT_CHARS = 48 * 1024
 const MAX_FULL_OUTPUT_CHARS = 128 * 1024
-const MAX_KEPT_EXITED_PANES = 4
-// eslint-disable-next-line no-control-regex
-const ANSI_ESCAPE_RE = /\x1B(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1B]*(?:\x07|\x1B\\)|[@-Z\\-_])/g
+const MAX_KEPT_EXITED_PANES = 2
+/* eslint-disable no-control-regex */
+const ANSI_ESCAPE_RE =
+    /\x1B(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1B]*(?:\x07|\x1B\\)|[PX^_][^\x07\x1B]*(?:\x07|\x1B\\)|[@-Z\\-_])/g
+const RESIDUAL_ESCAPE_RE = /\x1B(?:\[[0-?]*[ -/]*[@-~]?|[()][0-9A-Za-z]?|.)/g
+/* eslint-enable no-control-regex */
 
 const DEFAULT_TAB_NAMES: Record<Exclude<PaneKind, "repl">, string> = {
     task: "tasks",
@@ -133,6 +137,56 @@ function stripAnsi(text: string): string {
     return text.replace(ANSI_ESCAPE_RE, "")
 }
 
+/**
+ * Normalize terminal text into single-line printable ASCII (`0x20..0x7E`):
+ * strips ANSI/control sequences, resolves `\r` overwrites and `\x08` backspaces,
+ * replaces non-ASCII runs with `?` (dropping leading bullet `? `), and caps length.
+ */
+export function sanitizeAsciiText(raw: string, maxChars = 200): string {
+    if (maxChars <= 0 || !raw) return ""
+    const withoutAnsi = stripAnsi(raw).replace(RESIDUAL_ESCAPE_RE, "")
+    const segments = withoutAnsi.split("\r")
+    let selected = ""
+    for (let i = segments.length - 1; i >= 0; i -= 1) {
+        const seg = segments[i]
+        if (seg && seg.trim().length > 0) {
+            selected = seg
+            break
+        }
+    }
+    if (!selected) return ""
+
+    const chars: string[] = []
+    for (const ch of selected) {
+        const code = ch.codePointAt(0) ?? 0
+        if (code === 0x08) {
+            chars.pop()
+            continue
+        }
+        if (ch === "\t" || ch === "\n") {
+            chars.push(" ")
+            continue
+        }
+        if ((code >= 0x00 && code <= 0x1f) || (code >= 0x7f && code <= 0x9f)) {
+            continue
+        }
+        chars.push(ch)
+    }
+
+    const joined = chars.join("")
+    const hadLeadingNonAscii = /^[^\x20-\x7e]/.test(joined.trimStart())
+    let ascii = joined.replace(/[^\x20-\x7e]+/g, "?")
+    if (hadLeadingNonAscii) {
+        ascii = ascii.replace(/^\?+\s+(?=[A-Za-z0-9[(])/, "")
+    }
+    ascii = ascii.replace(/\s+/g, " ").trim()
+
+    if (!ascii) return ""
+    if (ascii.length <= maxChars) return ascii
+    if (maxChars <= 3) return ascii.slice(0, maxChars)
+    return `${ascii.slice(0, maxChars - 3)}...`
+}
+
 function removeArtifacts(
     pane: TrackedPane,
     opts?: { keepLog?: boolean; keepBrief?: boolean },
@@ -165,7 +219,7 @@ export function readTailFromFile(
     let text = buffer.subarray(0, bytesRead).toString("utf-8")
     if (startOffset > 0) {
         const firstNewline = text.indexOf("\n")
-        if (firstNewline !== -1) {
+        if (firstNewline !== -1 && firstNewline < text.length - 1) {
             text = text.slice(firstNewline + 1)
         }
     }
@@ -211,12 +265,17 @@ export function parsePersistedState(data: unknown): PersistedZellijState | null 
         ) {
             continue
         }
+        const paneId = sanitizeAsciiText(item.paneId, 64)
+        const name = sanitizeAsciiText(item.name, 64)
+        const tabName = sanitizeAsciiText(item.tabName, 64) || "tab"
+        if (!paneId || !name) continue
+
         panes.push({
-            paneId: item.paneId,
+            paneId,
             numericId: item.numericId,
             tabId: item.tabId,
-            tabName: item.tabName,
-            name: item.name,
+            tabName,
+            name,
             kind: item.kind,
             layout: item.layout,
             command: item.command,
@@ -238,6 +297,13 @@ export function parsePersistedState(data: unknown): PersistedZellijState | null 
             lastAttentionSignature:
                 typeof item.lastAttentionSignature === "string"
                     ? item.lastAttentionSignature
+                    : undefined,
+            needsAttention:
+                typeof item.needsAttention === "boolean" ? item.needsAttention : undefined,
+            markedSeen: typeof item.markedSeen === "boolean" ? item.markedSeen : undefined,
+            lastOutputLine:
+                typeof item.lastOutputLine === "string"
+                    ? sanitizeAsciiText(item.lastOutputLine, 200) || undefined
                     : undefined,
         })
     }
@@ -263,6 +329,8 @@ export class ZellijSessionManager {
     private exitsDir = ""
     private artifactSeq = 0
     private lastPersistedJson = ""
+    private shuttingDown = false
+    private closingPaneIds = new Set<string>()
     private spawnQueue: Promise<unknown> = Promise.resolve()
 
     constructor(pi: ExtensionAPI) {
@@ -271,6 +339,8 @@ export class ZellijSessionManager {
 
     bindContext(ctx: ExtensionContext): void {
         this.ctx = ctx
+        this.shuttingDown = false
+        this.closingPaneIds.clear()
         const envSession = process.env.ZELLIJ_SESSION_NAME?.trim()
         if (envSession) {
             this.sessionName = envSession
@@ -307,6 +377,10 @@ export class ZellijSessionManager {
 
     isSessionReady(): boolean {
         return this.sessionReady
+    }
+
+    isClosingPane(paneId: string): boolean {
+        return this.closingPaneIds.has(paneId)
     }
 
     getAttachHint(): string | undefined {
@@ -362,6 +436,21 @@ export class ZellijSessionManager {
 
     writeBriefFile(briefPath: string, content: string): void {
         writeFileSync(briefPath, content, { encoding: "utf-8", mode: 0o600 })
+    }
+
+    readLastOutputLine(pane: TrackedPane): string | undefined {
+        if (!pane.logPath || !existsSync(pane.logPath)) return undefined
+        try {
+            const { text } = readTailFromFile(pane.logPath, 16 * 1024)
+            const lines = text.split("\n")
+            for (let i = lines.length - 1; i >= 0; i -= 1) {
+                const candidate = sanitizeAsciiText(lines[i] ?? "", 200)
+                if (candidate) return candidate
+            }
+            return undefined
+        } catch {
+            return undefined
+        }
     }
 
     async readPaneOutput(
@@ -457,8 +546,25 @@ export class ZellijSessionManager {
             if (pane.status === "closed") continue
             const live = liveById.get(pane.numericId)
             if (!live) continue
+            const prevExit = pane.exitCode ?? null
             pane.status = live.exited ? "exited" : "running"
-            pane.exitCode = live.exit_status ?? live.command_state?.lastExitCode ?? null
+            pane.exitCode =
+                live.exit_status ??
+                live.command_state?.lastExitCode ??
+                (live.exited ? readExitMarker(pane.exitMarkerPath) : null) ??
+                (live.exited ? prevExit : null)
+            if (pane.status === "exited") {
+                pane.needsAttention = false
+                pane.endedAt = pane.endedAt ?? Date.now()
+                pane.notifiedCompletion = true
+            }
+            if (!pane.needsAttention) {
+                pane.lastOutputLine =
+                    this.readLastOutputLine(pane) ??
+                    (pane.lastOutputLine ? sanitizeAsciiText(pane.lastOutputLine, 200) : undefined)
+            } else if (pane.lastOutputLine) {
+                pane.lastOutputLine = sanitizeAsciiText(pane.lastOutputLine, 200) || undefined
+            }
             this.panes.set(pane.paneId, pane)
         }
 
@@ -467,7 +573,12 @@ export class ZellijSessionManager {
         }
     }
 
+    markShuttingDown(): void {
+        this.shuttingDown = true
+    }
+
     persist(): void {
+        if (this.shuttingDown) return
         const snapshot: PersistedZellijState = {
             sessionName: this.sessionName,
             managedSession: this.managedSession,
@@ -505,10 +616,16 @@ export class ZellijSessionManager {
 
     private finalizeClosedPane(
         pane: TrackedPane,
-        opts?: { keepLog?: boolean; keepBrief?: boolean; skipPersist?: boolean },
+        opts?: {
+            keepLog?: boolean
+            keepBrief?: boolean
+            skipPersist?: boolean
+            keepClient?: boolean
+        },
     ): void {
         pane.status = "closed"
         pane.endedAt = pane.endedAt ?? Date.now()
+        this.closingPaneIds.delete(pane.paneId)
         this.panes.delete(pane.paneId)
         removeArtifacts(pane, {
             keepLog: opts?.keepLog,
@@ -517,12 +634,22 @@ export class ZellijSessionManager {
         if (!opts?.skipPersist) {
             this.persist()
         }
-        if (this.panes.size === 0) {
+        if (this.panes.size === 0 && !opts?.keepClient) {
             this.releaseSessionClient()
         }
     }
 
+    private enqueueMutation<T>(fn: () => Promise<T>): Promise<T> {
+        const next = this.spawnQueue.then(fn)
+        this.spawnQueue = next.catch(() => {})
+        return next
+    }
+
     async destroyManagedSessionIfEmpty(): Promise<void> {
+        return this.enqueueMutation(() => this.destroyManagedSessionIfEmptyUnlocked())
+    }
+
+    private async destroyManagedSessionIfEmptyUnlocked(): Promise<void> {
         if (!this.managedSession || !this.sessionReady || !this.sessionName) return
         if (this.getRunningPanes().length > 0) return
 
@@ -536,13 +663,11 @@ export class ZellijSessionManager {
     }
 
     async spawnInTopology(opts: SpawnOptions): Promise<TrackedPane> {
-        // Serialize topology mutations so concurrent calls do not race creating the same category tab.
-        const next = this.spawnQueue.then(() => this.spawnInTopologyUnlocked(opts))
-        this.spawnQueue = next.catch(() => {})
-        return next
+        // Serialize topology and lifecycle mutations so concurrent calls do not race.
+        return this.enqueueMutation(() => this.spawnInTopologyUnlocked(opts))
     }
 
-    private async pruneOlderExitedPanes(): Promise<void> {
+    private async pruneOlderExitedPanesUnlocked(opts?: { keepClient?: boolean }): Promise<void> {
         const exited = Array.from(this.panes.values())
             .filter((p) => p.status === "exited" && p.notifiedCompletion)
             .sort((a, b) => (a.endedAt ?? a.startedAt) - (b.endedAt ?? b.startedAt))
@@ -557,7 +682,11 @@ export class ZellijSessionManager {
                 // Leave pane tracked and preserve artifacts if closing failed.
                 continue
             }
-            this.finalizeClosedPane(oldest, { skipPersist: true })
+            this.finalizeClosedPane(oldest, {
+                keepLog: true,
+                skipPersist: true,
+                keepClient: opts?.keepClient,
+            })
             pruned = true
         }
         if (pruned) {
@@ -565,11 +694,55 @@ export class ZellijSessionManager {
         }
     }
 
+    async reapCompletedPanes(): Promise<TrackedPane[]> {
+        return this.enqueueMutation(() => this.reapCompletedPanesUnlocked())
+    }
+
+    private async reapCompletedPanesUnlocked(opts?: {
+        keepClient?: boolean
+    }): Promise<TrackedPane[]> {
+        const candidates = Array.from(this.panes.values()).filter(
+            (p) =>
+                p.status === "exited" &&
+                p.notifiedCompletion &&
+                (((p.kind === "task" || p.kind === "agent") && p.exitCode === 0) ||
+                    p.kind === "repl"),
+        )
+
+        const closed: TrackedPane[] = []
+        for (const pane of candidates) {
+            try {
+                await this.tryClosePaneSafe(pane.paneId)
+            } catch {
+                // Leave pane tracked and preserve artifacts if closing failed.
+                continue
+            }
+            this.finalizeClosedPane(pane, {
+                keepLog: true,
+                skipPersist: true,
+                keepClient: opts?.keepClient,
+            })
+            closed.push(pane)
+        }
+
+        if (closed.length > 0) {
+            this.persist()
+        }
+        await this.pruneOlderExitedPanesUnlocked(opts)
+        return closed
+    }
+
+    cleanupRuntimeDir(): void {
+        if (this.runtimeDir && existsSync(this.runtimeDir)) {
+            rmSync(this.runtimeDir, { recursive: true, force: true })
+        }
+    }
+
     private async spawnInTopologyUnlocked(opts: SpawnOptions): Promise<TrackedPane> {
         const session = await this.ensureSession()
-        // Prune exited panes before retaining a persistent helper so pruning to 0 does
+        // Keep any existing helper client attached while reaping before spawn so reaping to 0 does
         // not release and immediately re-attach a helper client.
-        await this.pruneOlderExitedPanes()
+        await this.reapCompletedPanesUnlocked({ keepClient: true })
         if (this.managedSession) {
             await retainPersistentClient(this.pi, session).catch(() => {})
         }
@@ -781,26 +954,51 @@ export class ZellijSessionManager {
      * exists in Zellij before throwing so genuine already-gone panes clean up safely.
      */
     private async tryClosePaneSafe(paneId: string): Promise<void> {
+        this.closingPaneIds.add(paneId)
+        const tracked = this.panes.get(paneId)
+        if (!tracked?.markedSeen) {
+            await markPaneSeen(this.pi, this.sessionName, paneId)
+                .then(() => {
+                    if (tracked) tracked.markedSeen = true
+                })
+                .catch(() => {})
+        }
         try {
             await closePane(this.pi, this.sessionName, paneId)
         } catch (err) {
-            const sessions = await listSessions(this.pi)
-            if (!sessions.includes(this.sessionName)) return
-            const live = await listPanes(this.pi, this.sessionName).catch(() => null)
-            if (live === null) throw err
-            const stillAlive = live.some((p) => !p.is_plugin && formatPaneId(p.id) === paneId)
-            if (stillAlive) throw err
+            let keepClosing = false
+            try {
+                const sessions = await listSessions(this.pi)
+                if (!sessions.includes(this.sessionName)) {
+                    keepClosing = true
+                } else {
+                    const live = await listPanes(this.pi, this.sessionName).catch(() => null)
+                    if (live !== null) {
+                        keepClosing = !live.some(
+                            (p) => !p.is_plugin && formatPaneId(p.id) === paneId,
+                        )
+                    }
+                }
+            } catch {
+                keepClosing = false
+            }
+            if (!keepClosing) {
+                this.closingPaneIds.delete(paneId)
+                throw err
+            }
         }
     }
 
     async closeTrackedPane(paneIdOrName: string, kind?: PaneKind): Promise<TrackedPane> {
-        const tracked = this.getPane(paneIdOrName, kind)
-        if (!tracked) {
-            throw new Error(`No tracked zellij pane matches "${paneIdOrName}".`)
-        }
-        await this.tryClosePaneSafe(tracked.paneId)
-        this.finalizeClosedPane(tracked)
-        return tracked
+        return this.enqueueMutation(async () => {
+            const tracked = this.getPane(paneIdOrName, kind)
+            if (!tracked) {
+                throw new Error(`No tracked zellij pane matches "${paneIdOrName}".`)
+            }
+            await this.tryClosePaneSafe(tracked.paneId)
+            this.finalizeClosedPane(tracked)
+            return tracked
+        })
     }
 
     async sweep(opts?: { killRunning?: boolean }): Promise<{
@@ -808,32 +1006,34 @@ export class ZellijSessionManager {
         keptRunning: TrackedPane[]
         failed: Array<{ pane: TrackedPane; error: string }>
     }> {
-        const closed: TrackedPane[] = []
-        const keptRunning: TrackedPane[] = []
-        const failed: Array<{ pane: TrackedPane; error: string }> = []
+        return this.enqueueMutation(async () => {
+            const closed: TrackedPane[] = []
+            const keptRunning: TrackedPane[] = []
+            const failed: Array<{ pane: TrackedPane; error: string }> = []
 
-        for (const pane of Array.from(this.panes.values())) {
-            if (pane.status === "running" && !opts?.killRunning) {
-                keptRunning.push(pane)
-                continue
+            for (const pane of Array.from(this.panes.values())) {
+                if (pane.status === "running" && !opts?.killRunning) {
+                    keptRunning.push(pane)
+                    continue
+                }
+                try {
+                    await this.tryClosePaneSafe(pane.paneId)
+                } catch (err) {
+                    failed.push({
+                        pane,
+                        error: err instanceof Error ? err.message : String(err),
+                    })
+                    continue
+                }
+                this.finalizeClosedPane(pane, { skipPersist: true })
+                closed.push(pane)
             }
-            try {
-                await this.tryClosePaneSafe(pane.paneId)
-            } catch (err) {
-                failed.push({
-                    pane,
-                    error: err instanceof Error ? err.message : String(err),
-                })
-                continue
-            }
-            this.finalizeClosedPane(pane, { skipPersist: true })
-            closed.push(pane)
-        }
 
-        if (closed.length > 0) {
-            this.persist()
-        }
-        return { closed, keptRunning, failed }
+            if (closed.length > 0) {
+                this.persist()
+            }
+            return { closed, keptRunning, failed }
+        })
     }
 
     markPaneUpdated(): void {

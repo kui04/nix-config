@@ -26,6 +26,9 @@ export interface TrackedPane {
     exitCode?: number | null
     notifiedCompletion?: boolean
     lastAttentionSignature?: string
+    needsAttention?: boolean
+    markedSeen?: boolean
+    lastOutputLine?: string
 }
 
 export interface PersistedZellijState {
@@ -37,6 +40,9 @@ export interface PersistedZellijState {
 export interface ZellijAttention {
     status: string
     changed_ms: number
+    source?: string | null
+    text?: string | null
+    from_watch?: boolean
 }
 
 export interface ZellijProgramStatus {
@@ -125,6 +131,9 @@ function parseAttention(value: unknown): ZellijAttention | undefined {
     return {
         status: asString(value.status, "Idle"),
         changed_ms: asNumber(value.changed_ms),
+        source: asNullableString(value.source),
+        text: asNullableString(value.text),
+        from_watch: asBoolean(value.from_watch),
     }
 }
 

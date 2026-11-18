@@ -27,3 +27,9 @@ Scope: `users/.config/pi/extensions/zellij/` (human overview lives in [README.md
 - Keep the `new-pane` + `stack-panes` fallback in `src/session.ts`; Zellij 0.46 can report `No room for a new pane` on
   `--stacked` for unfocused tabs after client detach.
 - Always pass `--` before positional arguments to `zellij action write-chars`, `send-keys`, and `rename-pane`.
+- Pass `--no-pane-name --no-tab-name` to `zellij prompt notify` and resolve `ZELLIJ_PANE_ID` from an attached user
+  client row in `list-clients` (excluding the persistent helper client); `zellij prompt notify` fails when
+  `ZELLIJ_PANE_ID` is unset or non-numeric.
+- Omit `--notify` (`watch-pane`) on `service` and `rpc` subagent panes, and treat `attention` events with
+  `from_watch: true` (or `source === "Watch"` with `text === "went quiet"`) as quiet-watch timers that require
+  `INTERACTIVE_PROMPT_RE` verification.

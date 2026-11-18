@@ -57,8 +57,12 @@ export default async function (pi: ExtensionAPI) {
         watcher.ensureLoopRunning()
     })
 
+    pi.on("agent_settled", async () => {
+        await manager.reapCompletedPanes().catch(() => {})
+        watcher.ensureLoopRunning()
+    })
+
     pi.on("session_shutdown", async (event, ctx) => {
-        watcher.dispose()
         if (event.reason === "quit") {
             const running = manager.getRunningPanes()
             if (running.length > 0) {
@@ -72,9 +76,15 @@ export default async function (pi: ExtensionAPI) {
                 // Clean up already-exited tracked panes while keeping running services alive.
                 await manager.sweep({ killRunning: false }).catch(() => {})
             } else {
-                // Clean up empty managed headless sessions so `(EXITED)` sessions do not accumulate.
+                // Clean up exited tracked panes in both managed and host sessions, then delete empty managed session.
+                await manager.sweep({ killRunning: false }).catch(() => {})
                 await manager.destroyManagedSessionIfEmpty().catch(() => {})
             }
+            if (manager.getTrackedPanes().length === 0) {
+                manager.cleanupRuntimeDir()
+            }
         }
+        watcher.dispose()
+        manager.markShuttingDown()
     })
 }
