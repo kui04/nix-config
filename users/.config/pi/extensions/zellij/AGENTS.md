@@ -19,6 +19,9 @@ Scope: `users/.config/pi/extensions/zellij/` (human overview lives in [README.md
   subagents do not run a nested orchestrator.
 - Do not dispose `PaneWatcher` on `session_before_switch`; other extensions can cancel the switch, so tear down only in
   `session_shutdown`.
+- Keep `registerZellijTools` wiring the pane-finalized listener and keep `suppressPaneNotify`/`releasePaneNotify`
+  balanced; they wake waits on manager-side closes and prevent duplicate followUps.
+- Keep finished-pane retention bounded: `rememberFinishedPane` must delete the evicted pane's `logPath` and `briefPath`.
 
 ## Zellij 0.46.0 CLI Invariants
 

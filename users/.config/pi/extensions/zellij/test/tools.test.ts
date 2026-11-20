@@ -4,7 +4,7 @@ import test from "node:test"
 import { ZellijSessionManager } from "../src/session.ts"
 import { registerZellijTools, wrapCommandWithTee } from "../src/tools.ts"
 import { PaneWatcher } from "../src/watcher.ts"
-import { createMockContext, createMockRuntime } from "./helpers.ts"
+import { createMockContext, createMockRuntime, waitForRegisteredWaiters } from "./helpers.ts"
 
 void test("wrapCommandWithTee embeds PATH, tee log, and exit marker", () => {
     const cmd = wrapCommandWithTee("npm test", "/tmp/a.log", "/tmp/a.exit", "/custom/bin")
@@ -89,6 +89,7 @@ void test("zellij_subagent one-shot passes the exact briefPath written to disk",
         )
         const sc = res.structuredContent as { briefPath: string; status: string }
         assert.equal(sc.status, "exited")
+        assert.equal(manager.getPane("sub-audit")?.subagentMode, "one-shot")
         assert.ok(existsSync(sc.briefPath), "briefPath must exist on disk")
         assert.equal(readFileSync(sc.briefPath, "utf-8"), "Inspect foo.ts")
         assert.ok(
@@ -395,7 +396,7 @@ void test("waitForExit suppresses duplicate followUps, releases on timeout, and 
         })
 
         const waitPromise = watcher.waitForExit(paneB, 1000)
-        await new Promise((done) => setTimeout(done, 30))
+        await waitForRegisteredWaiters(watcher, paneB.paneId, 1)
         livePanes = livePanes.filter((p) => p.id !== 52)
         await watcher.runSingleSync()
 
@@ -521,6 +522,7 @@ void test("zellij_subagent rpc checks command_state, verifies ack, and cleans up
             ctx as never,
         )
         assert.equal((okRes.structuredContent as { status: string }).status, "rpc_running")
+        assert.equal(manager.getPane("sub-worker-ok")?.subagentMode, "rpc")
 
         // Failure path: command_state never becomes `pi`; must throw and close pane.
         modePi = false
@@ -653,6 +655,537 @@ void test("zellij_pane send/keys clear needsAttention, call mark-pane-seen first
         )
         assert.deepEqual(callOrder.slice(3, 5), ["mark-pane-seen", "send-keys"])
         assert.equal(pane.needsAttention, false)
+
+        watcher.dispose()
+    } finally {
+        if (prevHost !== undefined) process.env.ZELLIJ_SESSION_NAME = prevHost
+        else delete process.env.ZELLIJ_SESSION_NAME
+        manager.cleanupRuntimeDir()
+    }
+})
+
+void test("zellij_wait selects running task and one-shot agent panes and skips service, repl, and rpc", async () => {
+    const sessionId = `wait-select-${Date.now()}`
+    const paneIds = new Map([
+        ["build-job", "terminal_81"],
+        ["sub-one-shot", "terminal_82"],
+        ["sub-rpc", "terminal_83"],
+        ["api", "terminal_84"],
+        ["shell", "terminal_85"],
+    ])
+    let livePanes: Array<Record<string, unknown>> = [81, 82, 83, 84, 85].map((id) => ({
+        id,
+        is_plugin: false,
+        is_floating: id === 85,
+        exited: false,
+        tab_id: 1,
+        tab_name: "tasks",
+    }))
+    const { pi, tools } = createMockRuntime((_cmd, args) => {
+        if (args.includes("list-clients")) {
+            return Promise.resolve({
+                stdout: "CLIENT_ID\n1\n",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-tabs")) {
+            return Promise.resolve({
+                stdout: JSON.stringify([
+                    { position: 0, name: "tasks", active: true, tab_id: 1 },
+                    { position: 1, name: "services", active: false, tab_id: 2 },
+                    { position: 2, name: "agents", active: false, tab_id: 3 },
+                ]),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("new-pane")) {
+            const name = args[args.indexOf("-n") + 1] ?? ""
+            return Promise.resolve({
+                stdout: `${paneIds.get(name) ?? "terminal_99"}\n`,
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-panes")) {
+            return Promise.resolve({
+                stdout: JSON.stringify(livePanes),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        return Promise.resolve({ stdout: "", stderr: "", code: 0, killed: false, truncated: false })
+    })
+
+    const prevHost = process.env.ZELLIJ_SESSION_NAME
+    process.env.ZELLIJ_SESSION_NAME = "mock-wait-select"
+    const manager = new ZellijSessionManager(pi)
+    try {
+        const ctx = createMockContext(sessionId)
+        manager.bindContext(ctx)
+        const watcher = new PaneWatcher(pi, manager)
+        registerZellijTools(pi, manager, watcher)
+
+        const taskArt = manager.allocateArtifactPaths("build-job")
+        writeFileSync(taskArt.logPath, "build-job finished\n", "utf-8")
+        await manager.spawnInTopology({
+            kind: "task",
+            name: "build-job",
+            command: ["bash"],
+            cwd: "/tmp",
+            layout: "stacked",
+            logPath: taskArt.logPath,
+            exitMarkerPath: taskArt.exitMarkerPath,
+        })
+
+        const agentArt = manager.allocateArtifactPaths("sub-one-shot")
+        writeFileSync(agentArt.logPath, "one-shot answer\n", "utf-8")
+        await manager.spawnInTopology({
+            kind: "agent",
+            name: "sub-one-shot",
+            command: ["pi", "-p"],
+            cwd: "/tmp",
+            layout: "stacked",
+            logPath: agentArt.logPath,
+            exitMarkerPath: agentArt.exitMarkerPath,
+            subagentMode: "one-shot",
+        })
+
+        await manager.spawnInTopology({
+            kind: "agent",
+            name: "sub-rpc",
+            command: ["pi", "--mode", "rpc"],
+            cwd: "/tmp",
+            layout: "stacked",
+            subagentMode: "rpc",
+        })
+        await manager.spawnInTopology({
+            kind: "service",
+            name: "api",
+            command: ["node", "server.js"],
+            cwd: "/tmp",
+            layout: "stacked",
+        })
+        await manager.spawnInTopology({
+            kind: "repl",
+            name: "shell",
+            command: ["bash"],
+            cwd: "/tmp",
+            layout: "floating",
+        })
+
+        const waitTool = tools.get("zellij_wait")
+        assert.ok(waitTool)
+        const updates: string[] = []
+
+        const res = await waitTool.execute(
+            "wait-default",
+            {},
+            undefined,
+            (update: { content: Array<{ type: string; text?: string }> }) => {
+                const text = update.content.find((item) => item.type === "text")?.text
+                if (!text) return
+                updates.push(text)
+                livePanes = livePanes.map((pane) =>
+                    pane.id === 81 || pane.id === 82
+                        ? { ...pane, exited: true, exit_status: 0 }
+                        : pane,
+                )
+            },
+            ctx as never,
+        )
+
+        const sc = res.structuredContent as {
+            status: string
+            panes: Array<{ name: string; status: string; output: string }>
+        }
+        assert.equal(sc.status, "completed")
+        assert.deepEqual(
+            sc.panes.map((pane) => pane.name),
+            ["build-job", "sub-one-shot"],
+        )
+        assert.ok(
+            updates.some((text) => text.includes("Waiting for 2 pane(s)")),
+            `onUpdate must describe the waiting panes, got: ${updates.join(" | ")}`,
+        )
+
+        const emptyRes = await waitTool.execute(
+            "wait-empty",
+            {},
+            undefined,
+            undefined,
+            ctx as never,
+        )
+        assert.equal((emptyRes.structuredContent as { status: string }).status, "no_running_panes")
+
+        await assert.rejects(
+            () =>
+                waitTool.execute(
+                    "wait-missing",
+                    { panes: ["missing-pane"] },
+                    undefined,
+                    undefined,
+                    ctx as never,
+                ),
+            /No tracked pane matches "missing-pane"/,
+        )
+
+        const exitedRes = await waitTool.execute(
+            "wait-exited",
+            { panes: ["build-job"] },
+            undefined,
+            undefined,
+            ctx as never,
+        )
+        const exitedSc = exitedRes.structuredContent as {
+            status: string
+            panes: Array<{ name: string; status: string; output: string }>
+        }
+        assert.equal(exitedSc.status, "completed")
+        assert.equal(exitedSc.panes[0]?.status, "exited")
+        assert.match(exitedSc.panes[0]?.output ?? "", /build-job finished/)
+
+        watcher.dispose()
+    } finally {
+        if (prevHost !== undefined) process.env.ZELLIJ_SESSION_NAME = prevHost
+        else delete process.env.ZELLIJ_SESSION_NAME
+        manager.cleanupRuntimeDir()
+    }
+})
+
+void test("zellij_wait returns a screen-only prompt without a pre-sync followUp", async () => {
+    const sessionId = `wait-prompt-${Date.now()}`
+    const livePanes: Array<Record<string, unknown>> = [
+        {
+            id: 98,
+            is_plugin: false,
+            is_floating: false,
+            exited: false,
+            tab_id: 1,
+            tab_name: "tasks",
+            attention: { status: "NeedsYou", changed_ms: 1 },
+        },
+    ]
+    const { pi, tools, sentMessages } = createMockRuntime((_cmd, args) => {
+        if (args.includes("list-clients")) {
+            return Promise.resolve({
+                stdout: "CLIENT_ID\n1\n",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-tabs")) {
+            return Promise.resolve({
+                stdout: JSON.stringify([{ position: 0, name: "tasks", active: false, tab_id: 1 }]),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("new-pane")) {
+            return Promise.resolve({
+                stdout: "terminal_98\n",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("dump-screen")) {
+            return Promise.resolve({
+                stdout: "Proceed anyway? [y/N]",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-panes")) {
+            return Promise.resolve({
+                stdout: JSON.stringify(livePanes),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        return Promise.resolve({ stdout: "", stderr: "", code: 0, killed: false, truncated: false })
+    })
+
+    const prevHost = process.env.ZELLIJ_SESSION_NAME
+    process.env.ZELLIJ_SESSION_NAME = "mock-wait-prompt"
+    const manager = new ZellijSessionManager(pi)
+    try {
+        const ctx = createMockContext(sessionId)
+        manager.bindContext(ctx)
+        const watcher = new PaneWatcher(pi, manager)
+        registerZellijTools(pi, manager, watcher)
+
+        const art = manager.allocateArtifactPaths("job-prompt")
+        writeFileSync(art.logPath, "building...\n", "utf-8")
+        const pane = await manager.spawnInTopology({
+            kind: "task",
+            name: "job-prompt",
+            command: ["bash"],
+            cwd: "/tmp",
+            layout: "stacked",
+            logPath: art.logPath,
+            exitMarkerPath: art.exitMarkerPath,
+        })
+
+        const waitTool = tools.get("zellij_wait")
+        assert.ok(waitTool)
+        const res = await waitTool.execute(
+            "wait-prompt",
+            { panes: [pane.paneId] },
+            undefined,
+            undefined,
+            ctx as never,
+        )
+        const sc = res.structuredContent as {
+            status: string
+            panes: Array<{ needsAttention: boolean; output: string }>
+        }
+        assert.equal(sc.status, "needs_attention")
+        assert.equal(sc.panes[0]?.needsAttention, true)
+        assert.match(sc.panes[0]?.output ?? "", /Proceed anyway/)
+        assert.equal(sentMessages.length, 0)
+
+        watcher.dispose()
+    } finally {
+        if (prevHost !== undefined) process.env.ZELLIJ_SESSION_NAME = prevHost
+        else delete process.env.ZELLIJ_SESSION_NAME
+        manager.cleanupRuntimeDir()
+    }
+})
+
+void test("zellij_wait returns a reaped pane's retained log", async () => {
+    const sessionId = `wait-reaped-${Date.now()}`
+    const { pi, tools } = createMockRuntime((_cmd, args) => {
+        if (args.includes("list-clients")) {
+            return Promise.resolve({
+                stdout: "CLIENT_ID\n1\n",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-tabs")) {
+            return Promise.resolve({
+                stdout: JSON.stringify([{ position: 0, name: "tasks", active: false, tab_id: 1 }]),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("new-pane")) {
+            return Promise.resolve({
+                stdout: "terminal_99\n",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        return Promise.resolve({ stdout: "", stderr: "", code: 0, killed: false, truncated: false })
+    })
+
+    const prevHost = process.env.ZELLIJ_SESSION_NAME
+    process.env.ZELLIJ_SESSION_NAME = "mock-wait-reaped"
+    const manager = new ZellijSessionManager(pi)
+    try {
+        const ctx = createMockContext(sessionId)
+        manager.bindContext(ctx)
+        const watcher = new PaneWatcher(pi, manager)
+        registerZellijTools(pi, manager, watcher)
+
+        const art = manager.allocateArtifactPaths("job-reaped")
+        writeFileSync(art.logPath, "reaped log output\n", "utf-8")
+        const pane = await manager.spawnInTopology({
+            kind: "task",
+            name: "job-reaped",
+            command: ["bash"],
+            cwd: "/tmp",
+            layout: "stacked",
+            logPath: art.logPath,
+            exitMarkerPath: art.exitMarkerPath,
+        })
+        pane.status = "exited"
+        pane.exitCode = 0
+        pane.notifiedCompletion = true
+        pane.endedAt = Date.now()
+
+        await manager.reapCompletedPanes()
+        assert.equal(manager.getPane("job-reaped"), undefined)
+        assert.equal(manager.getRecentlyFinishedPane("job-reaped")?.paneId, pane.paneId)
+
+        const waitTool = tools.get("zellij_wait")
+        assert.ok(waitTool)
+        const res = await waitTool.execute(
+            "wait-reaped",
+            { panes: ["job-reaped"] },
+            undefined,
+            undefined,
+            ctx as never,
+        )
+        const sc = res.structuredContent as {
+            status: string
+            panes: Array<{ status: string; output: string }>
+        }
+        assert.equal(sc.status, "completed")
+        assert.equal(sc.panes[0]?.status, "exited")
+        assert.match(sc.panes[0]?.output ?? "", /reaped log output/)
+
+        watcher.dispose()
+    } finally {
+        if (prevHost !== undefined) process.env.ZELLIJ_SESSION_NAME = prevHost
+        else delete process.env.ZELLIJ_SESSION_NAME
+        manager.cleanupRuntimeDir()
+    }
+})
+
+void test("zellij_wait upgrades completed to needs_attention when another target prompts", async () => {
+    const sessionId = `wait-race-${Date.now()}`
+    let livePanes: Array<Record<string, unknown>> = [
+        {
+            id: 100,
+            is_plugin: false,
+            is_floating: false,
+            exited: false,
+            tab_id: 1,
+            tab_name: "tasks",
+        },
+        {
+            id: 101,
+            is_plugin: false,
+            is_floating: false,
+            exited: false,
+            tab_id: 1,
+            tab_name: "tasks",
+        },
+    ]
+    const { pi, tools, sentMessages } = createMockRuntime((_cmd, args) => {
+        if (args.includes("list-clients")) {
+            return Promise.resolve({
+                stdout: "CLIENT_ID\n1\n",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-tabs")) {
+            return Promise.resolve({
+                stdout: JSON.stringify([{ position: 0, name: "tasks", active: false, tab_id: 1 }]),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("new-pane")) {
+            const name = args[args.indexOf("-n") + 1] ?? ""
+            return Promise.resolve({
+                stdout: `${name === "job-race-exit" ? "terminal_100" : "terminal_101"}\n`,
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("dump-screen")) {
+            return Promise.resolve({
+                stdout: "Continue? (y/n)",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-panes")) {
+            return Promise.resolve({
+                stdout: JSON.stringify(livePanes),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        return Promise.resolve({ stdout: "", stderr: "", code: 0, killed: false, truncated: false })
+    })
+
+    const prevHost = process.env.ZELLIJ_SESSION_NAME
+    process.env.ZELLIJ_SESSION_NAME = "mock-wait-race"
+    const manager = new ZellijSessionManager(pi)
+    try {
+        const ctx = createMockContext(sessionId)
+        manager.bindContext(ctx)
+        const watcher = new PaneWatcher(pi, manager)
+        registerZellijTools(pi, manager, watcher)
+
+        const exitArt = manager.allocateArtifactPaths("job-race-exit")
+        writeFileSync(exitArt.logPath, "exit log\n", "utf-8")
+        const exitPane = await manager.spawnInTopology({
+            kind: "task",
+            name: "job-race-exit",
+            command: ["bash"],
+            cwd: "/tmp",
+            layout: "stacked",
+            logPath: exitArt.logPath,
+            exitMarkerPath: exitArt.exitMarkerPath,
+        })
+        const promptArt = manager.allocateArtifactPaths("job-race-prompt")
+        writeFileSync(promptArt.logPath, "prompt log\n", "utf-8")
+        const promptPane = await manager.spawnInTopology({
+            kind: "task",
+            name: "job-race-prompt",
+            command: ["bash"],
+            cwd: "/tmp",
+            layout: "stacked",
+            logPath: promptArt.logPath,
+            exitMarkerPath: promptArt.exitMarkerPath,
+        })
+
+        const waitTool = tools.get("zellij_wait")
+        assert.ok(waitTool)
+        const res = await waitTool.execute(
+            "wait-race",
+            { panes: [exitPane.paneId, promptPane.paneId], mode: "any" },
+            undefined,
+            () => {
+                livePanes = [
+                    { ...livePanes[0], exited: true, exit_status: 0 },
+                    {
+                        ...livePanes[1],
+                        exited: false,
+                        attention: { status: "NeedsYou", changed_ms: 4 },
+                    },
+                ]
+            },
+            ctx as never,
+        )
+        const sc = res.structuredContent as {
+            status: string
+            panes: Array<{ needsAttention: boolean; output: string }>
+        }
+        assert.equal(sc.status, "needs_attention")
+        assert.equal(sc.panes[1]?.needsAttention, true)
+        assert.match(sc.panes[1]?.output ?? "", /Continue\?/)
+        assert.equal(sentMessages.length, 0)
 
         watcher.dispose()
     } finally {

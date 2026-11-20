@@ -19,6 +19,7 @@ import {
     type LayoutMode,
     type PaneKind,
     type SplitDirection,
+    type SubagentMode,
     type TrackedPane,
 } from "./types.ts"
 import type { PaneWatcher } from "./watcher.ts"
@@ -276,6 +277,52 @@ const paneOutputSchema = Type.Object({
     output: Type.String(),
 })
 
+const waitSchema = Type.Object({
+    panes: Type.Optional(
+        Type.Array(Type.String(), {
+            description:
+                "Target pane IDs or names. Omit to wait for all running task and one-shot agent panes.",
+        }),
+    ),
+    mode: Type.Optional(
+        Type.Union([Type.Literal("all"), Type.Literal("any")], {
+            description:
+                '"all" waits for every target and returns early on an input prompt (default); "any" returns after the first exit or prompt.',
+        }),
+    ),
+    timeoutSeconds: Type.Optional(
+        Type.Number({
+            minimum: 1,
+            maximum: 600,
+            description: "Maximum seconds to wait before returning a timeout (default: 300).",
+        }),
+    ),
+})
+
+const waitPaneOutputSchema = Type.Object({
+    paneId: Type.String(),
+    name: Type.String(),
+    kind: Type.String(),
+    status: Type.String(),
+    exitCode: Type.Union([Type.Number(), Type.Null()]),
+    needsAttention: Type.Boolean(),
+    logPath: Type.Union([Type.String(), Type.Null()]),
+    output: Type.String(),
+})
+
+const waitOutputSchema = Type.Object({
+    status: Type.Union([
+        Type.Literal("completed"),
+        Type.Literal("needs_attention"),
+        Type.Literal("timeout"),
+        Type.Literal("aborted"),
+        Type.Literal("no_running_panes"),
+    ]),
+    mode: Type.String(),
+    panes: Type.Array(waitPaneOutputSchema),
+    message: Type.String(),
+})
+
 /**
  * Wrap a shell command so it exports the host Pi `PATH`, tees output to `logPath`,
  * writes its exact exit status to `exitMarkerPath`, and preserves the exit code.
@@ -308,6 +355,7 @@ interface ManagedPaneRequest {
     briefText?: string
     artifacts?: ArtifactPaths
     modelLabel?: string
+    subagentMode?: SubagentMode
 }
 
 async function runManagedPane(
@@ -333,6 +381,7 @@ async function runManagedPane(
         briefPath: req.briefText !== undefined ? briefPath : undefined,
         exitMarkerPath,
         modelLabel: req.modelLabel,
+        subagentMode: req.subagentMode,
     })
 
     return { pane, logPath, briefPath }
@@ -377,6 +426,9 @@ const PANE_ANNOTATIONS: ToolAnnotations = {
     openWorldHint: false,
 }
 
+const NO_WAIT_TARGETS_MESSAGE =
+    'No running task or one-shot subagent panes to wait for. Start work with zellij_run or zellij_subagent(mode="one-shot"), or pass panes explicitly. If you just started panes in this same tool batch, wait for those calls to return status=running, then call zellij_wait again. Background completions still arrive as zellij-event follow-ups.'
+
 function clearAttentionAfterInput(
     manager: ZellijSessionManager,
     watcher: PaneWatcher,
@@ -390,12 +442,93 @@ function clearAttentionAfterInput(
     watcher.refreshUI()
 }
 
+type WaitPaneSummary = {
+    paneId: string
+    name: string
+    kind: PaneKind
+    status: string
+    exitCode: number | null
+    needsAttention: boolean
+    logPath: string | null
+    output: string
+}
+
+function isDefaultWaitTarget(pane: TrackedPane): boolean {
+    if (pane.status !== "running") return false
+    if (pane.kind === "task") return true
+    return pane.kind === "agent" && (pane.subagentMode ?? "one-shot") === "one-shot"
+}
+
+function indentOutput(text: string): string {
+    return text
+        .split(/\r?\n/)
+        .map((line) => `    ${line}`)
+        .join("\n")
+}
+
+function formatWaitResultText(
+    status: string,
+    mode: string,
+    message: string,
+    panes: readonly WaitPaneSummary[],
+): string {
+    const lines = [`status: ${status}`, `mode: ${mode}`, `message: ${message}`]
+    if (panes.length === 0) return lines.join("\n")
+    lines.push("", `panes: ${panes.length}`)
+    for (const pane of panes) {
+        lines.push(
+            "",
+            `- paneId: ${pane.paneId} (${pane.name})`,
+            `  kind: ${pane.kind}`,
+            `  status: ${pane.status}`,
+            `  exitCode: ${pane.exitCode !== null ? String(pane.exitCode) : "unknown"}`,
+            `  needsAttention: ${pane.needsAttention ? "true" : "false"}`,
+            `  logPath: ${pane.logPath ?? "(none)"}`,
+            "  output:",
+            pane.output ? indentOutput(pane.output) : "    (no output)",
+        )
+    }
+    return lines.join("\n")
+}
+
+function buildWaitMessage(
+    status: "completed" | "needs_attention" | "timeout" | "aborted",
+    mode: "all" | "any",
+    panes: readonly WaitPaneSummary[],
+    timeoutSeconds: number,
+): string {
+    const running = panes.filter((p) => p.status === "running").length
+    const attentionNames = panes
+        .filter((p) => p.status === "running" && p.needsAttention)
+        .map((p) => `${p.name} (${p.paneId})`)
+        .join(", ")
+    const attentionNote = attentionNames ? ` Input needed in ${attentionNames}.` : ""
+    switch (status) {
+        case "completed": {
+            const failed = panes.filter((p) => p.exitCode !== null && p.exitCode !== 0).length
+            const base =
+                mode === "any"
+                    ? "At least one target pane is no longer running."
+                    : "All target panes are no longer running."
+            return `${base}${failed > 0 ? ` ${failed} pane(s) exited non-zero.` : ""}${attentionNote}`
+        }
+        case "needs_attention":
+            return `Input needed in ${attentionNames || "a target pane"}; inspect the output tail and reply with zellij_pane(action="send") or zellij_pane(action="keys").`
+        case "timeout":
+            return `${running} pane(s) still running after ${timeoutSeconds}s.${attentionNote} Background zellij-event follow-ups remain active.`
+        case "aborted":
+            return `Wait cancelled; ${running} pane(s) still running in the background.${attentionNote} Call zellij_wait again or rely on zellij-event follow-ups.`
+    }
+}
+
 /** Register all Zellij orchestration tools on the Pi extension API. */
 export function registerZellijTools(
     pi: ExtensionAPI,
     manager: ZellijSessionManager,
     watcher: PaneWatcher,
 ): void {
+    manager.setPaneFinalizedListener((pane) => watcher.notifyPaneFinalized(pane))
+
     pi.registerTool({
         name: "zellij_run",
         label: "Zellij Run",
@@ -405,7 +538,8 @@ export function registerZellijTools(
         promptSnippet: "Run build, test, lint, check, or long commands in a managed Zellij pane",
         promptGuidelines: [
             "Use zellij_run instead of bash for commands that may exceed ~15-30 seconds (builds, full test suites, nixos-rebuild, cargo/tsc/lint, migrations).",
-            "Do not poll zellij_pane in a loop after zellij_run returns status=running; the extension pushes a follow-up event automatically when the pane exits or needs input.",
+            "Start all independent zellij_run and zellij_subagent calls first. After they return status=running, call zellij_wait in a later tool batch when you need their results; do not run sleep in bash or poll zellij_pane.",
+            "If the user asked for background-only work with no wait, end the reply; zellij_run completion still triggers a zellij-event follow-up.",
         ],
         parameters: runSchema,
         outputSchema: runOutputSchema,
@@ -467,12 +601,14 @@ export function registerZellijTools(
 
             const preview = await manager.readPaneOutput(pane, { maxLines: 25 }).catch(() => "")
             const lines = [
-                `status: running (moved to background; follow-up event will fire on exit or prompt)`,
+                `status: running (moved to background; a follow-up event will fire on exit or prompt)`,
                 `paneId: ${pane.paneId} (${pane.name})`,
                 `session: ${manager.getSessionName()}`,
                 `tab: ${pane.tabName} (${pane.layout})`,
                 `logPath: ${logPath}`,
                 attach ? `attach: ${attach}` : undefined,
+                `next: Start other independent background work first; after the start calls return status=running, call zellij_wait in a later batch if you need this result before continuing. Do not run sleep or poll zellij_pane.`,
+                `background-only: If the user asked not to wait, end the reply; the follow-up event still fires on exit or prompt.`,
                 preview ? `\n--- Initial output ---\n${preview}` : undefined,
             ].filter((l): l is string => l !== undefined)
             return {
@@ -487,6 +623,128 @@ export function registerZellijTools(
                     exitCode: null,
                     logPath,
                     output: preview,
+                },
+                details: undefined,
+            }
+        },
+    })
+
+    pi.registerTool({
+        name: "zellij_wait",
+        label: "Zellij Wait",
+        description:
+            "Wait for background Zellij tasks or one-shot subagents to finish or request input. " +
+            "The wait is event-driven: it spends no tokens while waiting and uses no sleep polling; Pi stays working while it waits, and Esc cancels it.",
+        promptSnippet: "Wait for background Zellij tasks or subagents to finish or need input",
+        promptGuidelines: [
+            'Use zellij_wait after zellij_run or zellij_subagent(mode="one-shot") calls have returned status=running. Call it in a later tool batch, not in the same parallel batch as the start call, and do not run sleep in bash or poll zellij_pane.',
+            'zellij_wait defaults to mode="all" and returns early with status=needs_attention when any target pane asks for input; inspect the output tail and reply with zellij_pane(action="send") or zellij_pane(action="keys").',
+            "Do not call zellij_wait when the user asked for background-only work with no wait; end the reply and rely on the zellij-event follow-up.",
+        ],
+        parameters: waitSchema,
+        outputSchema: waitOutputSchema,
+        annotations: MUTATING_ANNOTATIONS,
+        async execute(_toolCallId, params: Static<typeof waitSchema>, signal, onUpdate) {
+            const mode = params.mode ?? "all"
+            const timeoutSeconds = params.timeoutSeconds ?? 300
+
+            let targets: TrackedPane[]
+            if (params.panes && params.panes.length > 0) {
+                targets = []
+                const seen = new Set<string>()
+                for (const query of params.panes) {
+                    const trimmed = query.trim()
+                    if (!trimmed) {
+                        throw new Error('"panes" cannot contain empty entries.')
+                    }
+                    const pane =
+                        manager.getPane(trimmed) ?? manager.getRecentlyFinishedPane(trimmed)
+                    if (!pane) {
+                        throw new Error(
+                            `No tracked pane matches "${query}". If it finished and was reaped, read the logPath from its earlier completion result.`,
+                        )
+                    }
+                    if (seen.has(pane.paneId)) continue
+                    seen.add(pane.paneId)
+                    targets.push(pane)
+                }
+            } else {
+                targets = manager.getTrackedPanes().filter(isDefaultWaitTarget)
+            }
+
+            if (targets.length === 0) {
+                const text = formatWaitResultText(
+                    "no_running_panes",
+                    mode,
+                    NO_WAIT_TARGETS_MESSAGE,
+                    [],
+                )
+                return {
+                    content: [{ type: "text", text }],
+                    structuredContent: {
+                        status: "no_running_panes",
+                        mode,
+                        panes: [],
+                        message: NO_WAIT_TARGETS_MESSAGE,
+                    },
+                    details: undefined,
+                }
+            }
+
+            const runningBefore = targets.filter((p) => p.status === "running")
+            if (runningBefore.length > 0) {
+                onUpdate?.({
+                    content: [
+                        {
+                            type: "text",
+                            text: `Waiting for ${runningBefore.length} pane(s) (mode=${mode}, timeout=${timeoutSeconds}s): ${runningBefore.map((p) => `${p.name} (${p.paneId})`).join(", ")}`,
+                        },
+                    ],
+                    details: undefined,
+                })
+            }
+
+            const waitResult = await watcher.waitForPanes(targets, {
+                mode,
+                timeoutMs: Math.round(timeoutSeconds * 1000),
+                signal,
+            })
+            watcher.ensureLoopRunning()
+
+            const panes: WaitPaneSummary[] = await Promise.all(
+                targets.map(async (pane) => {
+                    const preferScreen = pane.status === "running" && pane.needsAttention === true
+                    const output = await manager
+                        .readPaneOutput(pane, { maxLines: 60, preferScreen })
+                        .catch(() => "")
+                    return {
+                        paneId: pane.paneId,
+                        name: pane.name,
+                        kind: pane.kind,
+                        status: pane.status,
+                        exitCode: pane.exitCode ?? null,
+                        needsAttention: pane.needsAttention === true,
+                        logPath: pane.logPath ?? null,
+                        output: output || pane.lastOutputLine || "",
+                    }
+                }),
+            )
+            const attentionAfterWait = panes.some(
+                (pane) => pane.status === "running" && pane.needsAttention,
+            )
+            const reportedStatus =
+                waitResult.status === "completed" && attentionAfterWait
+                    ? "needs_attention"
+                    : waitResult.status
+            const message = buildWaitMessage(reportedStatus, mode, panes, timeoutSeconds)
+            const text = formatWaitResultText(reportedStatus, mode, message, panes)
+            return {
+                content: [{ type: "text", text }],
+                structuredContent: {
+                    status: reportedStatus,
+                    mode,
+                    panes,
+                    message,
                 },
                 details: undefined,
             }
@@ -690,6 +948,8 @@ export function registerZellijTools(
             "Use zellij_subagent for wide file surveys, long audits, or independent parallel subtasks that would bloat the main context.",
             "Write a completely self-contained prompt with absolute paths, constraints, and desired answer shape (child pi has an empty context).",
             "Keep child tools read-only (default) unless the task explicitly requires bash, edit, or write.",
+            'Start independent zellij_subagent and zellij_run calls first. For mode="one-shot", after the start call returns status=running, call zellij_wait in a later tool batch when you need the answer; do not run sleep in bash or poll zellij_pane.',
+            "If the user asked for background-only work with no wait, end the reply; one-shot zellij_subagent completion still triggers a zellij-event follow-up.",
         ],
         parameters: subagentSchema,
         outputSchema: subagentOutputSchema,
@@ -752,6 +1012,7 @@ export function registerZellijTools(
                 briefText: params.prompt,
                 artifacts,
                 modelLabel,
+                subagentMode: mode,
             })
 
             if (mode === "rpc") {
@@ -886,12 +1147,14 @@ export function registerZellijTools(
             }
 
             const text = [
-                `status: running (moved to background; follow-up event will deliver answer on completion)`,
+                `status: running (moved to background; a follow-up event will deliver the answer on completion)`,
                 `paneId: ${pane.paneId} (${pane.name})`,
                 `model: ${modelLabel}`,
                 `tab: ${pane.tabName} (${pane.layout})`,
                 `briefPath: ${briefPath}`,
                 `logPath: ${logPath}`,
+                `next: Start other independent background work first; after the start calls return status=running, call zellij_wait in a later batch if you need this subagent's answer before continuing. Do not run sleep or poll zellij_pane.`,
+                `background-only: If the user asked not to wait, end the reply; the follow-up event still delivers the answer on completion.`,
             ].join("\n")
             return {
                 content: [{ type: "text", text }],

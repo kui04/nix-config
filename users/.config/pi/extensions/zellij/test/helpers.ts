@@ -3,6 +3,7 @@ import type {
     ExtensionContext,
     ToolDefinition,
 } from "@earendil-works/pi-coding-agent"
+import type { PaneWatcher } from "../src/watcher.ts"
 
 export function createMockRuntime(execImpl: ExtensionAPI["exec"]) {
     const sentMessages: Array<{ customType: string; content: string; details: unknown }> = []
@@ -41,4 +42,21 @@ export function createMockContext(
             getBranch: () => branchEntries,
         },
     } as unknown as ExtensionContext
+}
+
+/** Wait until `watcher` has registered at least `expected` waiters for `paneId`. */
+export async function waitForRegisteredWaiters(
+    watcher: PaneWatcher,
+    paneId: string,
+    expected: number,
+): Promise<void> {
+    const internal = watcher as unknown as {
+        exitWaiters: Map<string, Set<unknown>>
+    }
+    const deadline = Date.now() + 500
+    while (Date.now() < deadline) {
+        if ((internal.exitWaiters.get(paneId)?.size ?? 0) >= expected) return
+        await new Promise((done) => setTimeout(done, 5))
+    }
+    throw new Error(`waiter for ${paneId} was not registered ${expected} time(s)`)
 }

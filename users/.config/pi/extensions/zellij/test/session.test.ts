@@ -51,6 +51,40 @@ void test("parsePersistedState validates schema and rejects malformed payloads",
     assert.equal(parsed.panes[0]?.lastOutputLine, "50%")
 })
 
+void test("parsePersistedState defaults legacy agent panes to one-shot and keeps explicit rpc mode", () => {
+    const base = {
+        paneId: "terminal_1",
+        numericId: 1,
+        tabId: 3,
+        tabName: "agents",
+        name: "legacy-agent",
+        kind: "agent",
+        layout: "stacked",
+        command: "pi -p",
+        cwd: "/tmp",
+        startedAt: 1,
+        status: "running",
+    }
+    const parsed = parsePersistedState({
+        sessionName: "s1",
+        managedSession: true,
+        panes: [
+            base,
+            {
+                ...base,
+                paneId: "terminal_2",
+                numericId: 2,
+                name: "rpc-agent",
+                command: "pi --mode rpc",
+                subagentMode: "rpc",
+            },
+        ],
+    })
+    assert.ok(parsed)
+    assert.equal(parsed.panes[0]?.subagentMode, "one-shot")
+    assert.equal(parsed.panes[1]?.subagentMode, "rpc")
+})
+
 void test("sanitizeAsciiText and readLastOutputLine normalize Unicode, CR, controls, and long lines", () => {
     assert.equal(sanitizeAsciiText("\x1b[32m✓\x1b[0m Compiling \t crate\x07\n"), "Compiling crate")
     assert.equal(sanitizeAsciiText("10%\r50%\r100% done"), "100% done")
@@ -544,6 +578,84 @@ void test("restoreFromSession preserves fallback exitCode, concurrent reap+sync 
         if (prevHost !== undefined) process.env.ZELLIJ_SESSION_NAME = prevHost
         else delete process.env.ZELLIJ_SESSION_NAME
         rmSync(dir, { recursive: true, force: true })
+        manager.cleanupRuntimeDir()
+    }
+})
+
+void test("recent finished panes evict the oldest log beyond the bounded registry", async () => {
+    const sessionId = `recent-evict-${Date.now()}`
+    let nextPane = 800
+    const { pi } = createMockRuntime((_cmd, args) => {
+        if (args.includes("list-clients")) {
+            return Promise.resolve({
+                stdout: "CLIENT_ID\n1\n",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-tabs")) {
+            return Promise.resolve({
+                stdout: JSON.stringify([{ position: 0, name: "tasks", active: false, tab_id: 1 }]),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("new-pane")) {
+            nextPane += 1
+            return Promise.resolve({
+                stdout: `terminal_${nextPane}\n`,
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        return Promise.resolve({ stdout: "", stderr: "", code: 0, killed: false, truncated: false })
+    })
+
+    const prevHost = process.env.ZELLIJ_SESSION_NAME
+    process.env.ZELLIJ_SESSION_NAME = "mock-recent-evict"
+    const manager = new ZellijSessionManager(pi)
+    try {
+        manager.bindContext(createMockContext(sessionId))
+        const logs: string[] = []
+        const panes = []
+        for (let i = 0; i < 9; i += 1) {
+            const art = manager.allocateArtifactPaths(`evict-${i}`)
+            writeFileSync(art.logPath, `evict log ${i}\n`, "utf-8")
+            logs.push(art.logPath)
+            panes.push(
+                await manager.spawnInTopology({
+                    kind: "task",
+                    name: `evict-${i}`,
+                    command: ["bash"],
+                    cwd: "/tmp",
+                    layout: "stacked",
+                    logPath: art.logPath,
+                    exitMarkerPath: art.exitMarkerPath,
+                }),
+            )
+        }
+        for (const [i, pane] of panes.entries()) {
+            pane.status = "exited"
+            pane.exitCode = 0
+            pane.notifiedCompletion = true
+            pane.endedAt = i + 1
+        }
+
+        const reaped = await manager.reapCompletedPanes()
+        assert.equal(reaped.length, 9)
+        assert.equal(manager.getRecentlyFinishedPane("evict-0"), undefined)
+        assert.equal(existsSync(logs[0] ?? ""), false)
+        assert.equal(manager.getRecentlyFinishedPane("evict-8")?.name, "evict-8")
+        assert.ok(existsSync(logs[8] ?? ""))
+    } finally {
+        if (prevHost !== undefined) process.env.ZELLIJ_SESSION_NAME = prevHost
+        else delete process.env.ZELLIJ_SESSION_NAME
         manager.cleanupRuntimeDir()
     }
 })

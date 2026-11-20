@@ -6,7 +6,7 @@ import test from "node:test"
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent"
 import { ZellijSessionManager } from "../src/session.ts"
 import { PaneWatcher } from "../src/watcher.ts"
-import { createMockContext, createMockRuntime } from "./helpers.ts"
+import { createMockContext, createMockRuntime, waitForRegisteredWaiters } from "./helpers.ts"
 
 void test("runSingleSync recovers exit code from marker, keeps service 0 as exited, and mutes repl", async () => {
     const dir = mkdtempSync(join(tmpdir(), "zj-sync-"))
@@ -292,7 +292,7 @@ void test("watcher checkNeedsAttention handles NeedsYou/Quiet and notifies on 3-
     }
 })
 
-void test("reapCompletedPanes closes exit-0 notified task/agent and exited repl panes, keeps logs, and caps failed panes at 2", async () => {
+void test("reapCompletedPanes closes every notified exited pane regardless of kind or exit code and keeps logs", async () => {
     const closedPanes: string[] = []
     const markedSeen: string[] = []
     const sessionId = `reap-test-${Date.now()}`
@@ -358,15 +358,15 @@ void test("reapCompletedPanes closes exit-0 notified task/agent and exited repl 
             logPath: taskOkArt.logPath,
         })
 
-        const agentOkArt = manager.allocateArtifactPaths("agent-ok")
-        writeFileSync(agentOkArt.logPath, "agent log\n", "utf-8")
-        const agentOk = await manager.spawnInTopology({
+        const agentFailedArt = manager.allocateArtifactPaths("agent-failed")
+        writeFileSync(agentFailedArt.logPath, "agent failure log\n", "utf-8")
+        const agentFailed = await manager.spawnInTopology({
             kind: "agent",
-            name: "agent-ok",
+            name: "agent-failed",
             command: ["pi"],
             cwd: "/tmp",
             layout: "stacked",
-            logPath: agentOkArt.logPath,
+            logPath: agentFailedArt.logPath,
         })
 
         const unnotified = await manager.spawnInTopology({
@@ -393,12 +393,15 @@ void test("reapCompletedPanes closes exit-0 notified task/agent and exited repl 
             layout: "floating",
         })
 
+        const fail1Art = manager.allocateArtifactPaths("fail-1")
+        writeFileSync(fail1Art.logPath, "fail log\n", "utf-8")
         const fail1 = await manager.spawnInTopology({
             kind: "task",
             name: "fail-1",
             command: ["false"],
             cwd: "/tmp",
             layout: "stacked",
+            logPath: fail1Art.logPath,
         })
 
         const fail2 = await manager.spawnInTopology({
@@ -422,10 +425,10 @@ void test("reapCompletedPanes closes exit-0 notified task/agent and exited repl 
         taskOk.notifiedCompletion = true
         taskOk.endedAt = 10
 
-        agentOk.status = "exited"
-        agentOk.exitCode = 0
-        agentOk.notifiedCompletion = true
-        agentOk.endedAt = 20
+        agentFailed.status = "exited"
+        agentFailed.exitCode = 1
+        agentFailed.notifiedCompletion = true
+        agentFailed.endedAt = 20
 
         unnotified.status = "exited"
         unnotified.exitCode = 0
@@ -433,7 +436,7 @@ void test("reapCompletedPanes closes exit-0 notified task/agent and exited repl 
         unnotified.endedAt = 30
 
         svcExited.status = "exited"
-        svcExited.exitCode = 0
+        svcExited.exitCode = 1
         svcExited.notifiedCompletion = true
         svcExited.endedAt = 40
 
@@ -460,19 +463,27 @@ void test("reapCompletedPanes closes exit-0 notified task/agent and exited repl 
         const reaped = await manager.reapCompletedPanes()
         assert.deepEqual(
             reaped.map((p) => p.name),
-            ["task-ok", "agent-ok", "repl-sigint"],
+            ["task-ok", "agent-failed", "svc-exited", "repl-sigint", "fail-1", "fail-2", "fail-3"],
         )
         assert.ok(existsSync(taskOkArt.logPath), "task-ok log must stay on disk after reap")
-        assert.ok(existsSync(agentOkArt.logPath), "agent-ok log must stay on disk after reap")
+        assert.ok(
+            existsSync(agentFailedArt.logPath),
+            "agent-failed log must stay on disk after reap",
+        )
+        assert.ok(existsSync(fail1Art.logPath), "fail-1 log must stay on disk after reap")
         assert.ok(closedPanes.includes(taskOk.paneId))
-        assert.ok(closedPanes.includes(agentOk.paneId))
+        assert.ok(closedPanes.includes(agentFailed.paneId))
+        assert.ok(closedPanes.includes(svcExited.paneId))
         assert.ok(closedPanes.includes(replExited.paneId))
+        assert.ok(closedPanes.includes(fail1.paneId))
         assert.equal(markedSeen.filter((id) => id === taskOk.paneId).length, 1)
-        assert.equal(markedSeen.filter((id) => id === agentOk.paneId).length, 1)
+        assert.equal(markedSeen.filter((id) => id === agentFailed.paneId).length, 1)
+        assert.equal(manager.getRecentlyFinishedPane("agent-failed")?.exitCode, 1)
+        assert.equal(manager.getRecentlyFinishedPane("svc-exited")?.kind, "service")
+        assert.equal(manager.getRecentlyFinishedPane("fail-1")?.exitCode, 1)
 
-        // Remaining exited notified panes (`svc-exited`, `fail-1`, `fail-2`, `fail-3`) are capped at 2 (`fail-2`, `fail-3`).
         const remainingIds = manager.getTrackedPanes().map((p) => p.name)
-        assert.deepEqual(remainingIds, ["task-unnotified", "fail-2", "fail-3"])
+        assert.deepEqual(remainingIds, ["task-unnotified"])
     } finally {
         if (prevHost !== undefined) process.env.ZELLIJ_SESSION_NAME = prevHost
         else delete process.env.ZELLIJ_SESSION_NAME
@@ -724,6 +735,1208 @@ void test("TUI widget renders pure ASCII across narrow widths, ANSI theme, live 
                 assert.ok(plain.length <= w, `width ${w} exceeded by "${plain}"`)
             }
         }
+
+        watcher.dispose()
+    } finally {
+        if (prevHost !== undefined) process.env.ZELLIJ_SESSION_NAME = prevHost
+        else delete process.env.ZELLIJ_SESSION_NAME
+        manager.cleanupRuntimeDir()
+    }
+})
+
+void test("waitForPanes mode all waits for every target and suppresses duplicate followUps", async () => {
+    const sessionId = `wait-all-${Date.now()}`
+    let livePanes: Array<Record<string, unknown>> = [
+        {
+            id: 71,
+            is_plugin: false,
+            is_floating: false,
+            exited: false,
+            tab_id: 1,
+            tab_name: "tasks",
+        },
+        {
+            id: 72,
+            is_plugin: false,
+            is_floating: false,
+            exited: false,
+            tab_id: 1,
+            tab_name: "tasks",
+        },
+    ]
+    const { pi, sentMessages } = createMockRuntime((_cmd, args) => {
+        if (args.includes("list-clients")) {
+            return Promise.resolve({
+                stdout: "CLIENT_ID\n1\n",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-tabs")) {
+            return Promise.resolve({
+                stdout: JSON.stringify([{ position: 0, name: "tasks", active: false, tab_id: 1 }]),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("new-pane")) {
+            const name = args[args.indexOf("-n") + 1] ?? ""
+            return Promise.resolve({
+                stdout: `${name === "job-all-a" ? "terminal_71" : "terminal_72"}\n`,
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-panes")) {
+            return Promise.resolve({
+                stdout: JSON.stringify(livePanes),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        return Promise.resolve({ stdout: "", stderr: "", code: 0, killed: false, truncated: false })
+    })
+
+    const prevHost = process.env.ZELLIJ_SESSION_NAME
+    process.env.ZELLIJ_SESSION_NAME = "mock-wait-all"
+    const manager = new ZellijSessionManager(pi)
+    try {
+        manager.bindContext(createMockContext(sessionId))
+        const watcher = new PaneWatcher(pi, manager)
+
+        const artA = manager.allocateArtifactPaths("job-all-a")
+        writeFileSync(artA.logPath, "job a done\n", "utf-8")
+        const paneA = await manager.spawnInTopology({
+            kind: "task",
+            name: "job-all-a",
+            command: ["bash"],
+            cwd: "/tmp",
+            layout: "stacked",
+            logPath: artA.logPath,
+            exitMarkerPath: artA.exitMarkerPath,
+        })
+
+        const artB = manager.allocateArtifactPaths("job-all-b")
+        writeFileSync(artB.logPath, "job b still running\n", "utf-8")
+        const paneB = await manager.spawnInTopology({
+            kind: "task",
+            name: "job-all-b",
+            command: ["bash"],
+            cwd: "/tmp",
+            layout: "stacked",
+            logPath: artB.logPath,
+            exitMarkerPath: artB.exitMarkerPath,
+        })
+
+        const waitPromise = watcher.waitForPanes([paneA, paneB], {
+            mode: "all",
+            timeoutMs: 2000,
+        })
+        const settledState = { done: false }
+        void waitPromise.then(() => {
+            settledState.done = true
+        })
+        await waitForRegisteredWaiters(watcher, paneA.paneId, 1)
+        await waitForRegisteredWaiters(watcher, paneB.paneId, 1)
+
+        livePanes = livePanes.map((pane) =>
+            pane.id === 71
+                ? { ...pane, exited: true, exit_status: 0 }
+                : { ...pane, exited: false, exit_status: null },
+        )
+        await watcher.runSingleSync()
+        assert.equal(settledState.done, false)
+        assert.equal(sentMessages.length, 0)
+
+        livePanes = livePanes.map((pane) => ({
+            ...pane,
+            exited: true,
+            exit_status: pane.id === 72 ? 1 : 0,
+        }))
+        await watcher.runSingleSync()
+
+        const res = await waitPromise
+        assert.equal(res.status, "completed")
+        assert.deepEqual(
+            res.panes.map((pane) => pane.status),
+            ["exited", "exited"],
+        )
+        assert.equal(paneA.notifiedCompletion, true)
+        assert.equal(paneB.notifiedCompletion, true)
+        assert.equal(sentMessages.length, 0)
+
+        watcher.dispose()
+    } finally {
+        if (prevHost !== undefined) process.env.ZELLIJ_SESSION_NAME = prevHost
+        else delete process.env.ZELLIJ_SESSION_NAME
+        manager.cleanupRuntimeDir()
+    }
+})
+
+void test("waitForPanes mode any returns after one target and restores followUp for the rest", async () => {
+    const sessionId = `wait-any-${Date.now()}`
+    let livePanes: Array<Record<string, unknown>> = [
+        {
+            id: 73,
+            is_plugin: false,
+            is_floating: false,
+            exited: false,
+            tab_id: 1,
+            tab_name: "tasks",
+        },
+        {
+            id: 74,
+            is_plugin: false,
+            is_floating: false,
+            exited: false,
+            tab_id: 1,
+            tab_name: "tasks",
+        },
+    ]
+    const { pi, sentMessages } = createMockRuntime((_cmd, args) => {
+        if (args.includes("list-clients")) {
+            return Promise.resolve({
+                stdout: "CLIENT_ID\n1\n",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-tabs")) {
+            return Promise.resolve({
+                stdout: JSON.stringify([{ position: 0, name: "tasks", active: false, tab_id: 1 }]),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("new-pane")) {
+            const name = args[args.indexOf("-n") + 1] ?? ""
+            return Promise.resolve({
+                stdout: `${name === "job-any-a" ? "terminal_73" : "terminal_74"}\n`,
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-panes")) {
+            return Promise.resolve({
+                stdout: JSON.stringify(livePanes),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        return Promise.resolve({ stdout: "", stderr: "", code: 0, killed: false, truncated: false })
+    })
+
+    const prevHost = process.env.ZELLIJ_SESSION_NAME
+    process.env.ZELLIJ_SESSION_NAME = "mock-wait-any"
+    const manager = new ZellijSessionManager(pi)
+    try {
+        manager.bindContext(createMockContext(sessionId))
+        const watcher = new PaneWatcher(pi, manager)
+
+        const paneA = await manager.spawnInTopology({
+            kind: "task",
+            name: "job-any-a",
+            command: ["bash"],
+            cwd: "/tmp",
+            layout: "stacked",
+        })
+        const paneB = await manager.spawnInTopology({
+            kind: "task",
+            name: "job-any-b",
+            command: ["bash"],
+            cwd: "/tmp",
+            layout: "stacked",
+        })
+
+        const waitPromise = watcher.waitForPanes([paneA, paneB], {
+            mode: "any",
+            timeoutMs: 2000,
+        })
+        await waitForRegisteredWaiters(watcher, paneA.paneId, 1)
+        await waitForRegisteredWaiters(watcher, paneB.paneId, 1)
+        livePanes = livePanes.map((pane) =>
+            pane.id === 73
+                ? { ...pane, exited: true, exit_status: 0 }
+                : { ...pane, exited: false, exit_status: null },
+        )
+        await watcher.runSingleSync()
+
+        const res = await waitPromise
+        assert.equal(res.status, "completed")
+        assert.equal(paneA.status, "exited")
+        assert.equal(paneA.notifiedCompletion, true)
+        assert.equal(paneB.status, "running")
+        assert.equal(sentMessages.length, 0)
+
+        // The remaining pane was released from wait suppression, so its exit still notifies.
+        livePanes = livePanes.map((pane) => ({ ...pane, exited: true, exit_status: 0 }))
+        await watcher.runSingleSync()
+        assert.equal(sentMessages.length, 1)
+        assert.equal((sentMessages[0]?.details as { paneId: string }).paneId, paneB.paneId)
+
+        watcher.dispose()
+    } finally {
+        if (prevHost !== undefined) process.env.ZELLIJ_SESSION_NAME = prevHost
+        else delete process.env.ZELLIJ_SESSION_NAME
+        manager.cleanupRuntimeDir()
+    }
+})
+
+void test("waitForPanes mode all returns needs_attention early without duplicate followUp", async () => {
+    const sessionId = `wait-att-${Date.now()}`
+    const livePanes: Array<Record<string, unknown>> = [
+        {
+            id: 75,
+            is_plugin: false,
+            is_floating: false,
+            exited: false,
+            tab_id: 1,
+            tab_name: "tasks",
+            attention: { status: "NeedsYou", changed_ms: 1 },
+        },
+        {
+            id: 76,
+            is_plugin: false,
+            is_floating: false,
+            exited: false,
+            tab_id: 1,
+            tab_name: "tasks",
+        },
+    ]
+    const { pi, sentMessages } = createMockRuntime((_cmd, args) => {
+        if (args.includes("list-clients")) {
+            return Promise.resolve({
+                stdout: "CLIENT_ID\n1\n",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-tabs")) {
+            return Promise.resolve({
+                stdout: JSON.stringify([{ position: 0, name: "tasks", active: false, tab_id: 1 }]),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("new-pane")) {
+            const name = args[args.indexOf("-n") + 1] ?? ""
+            return Promise.resolve({
+                stdout: `${name === "job-att-a" ? "terminal_75" : "terminal_76"}\n`,
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("dump-screen")) {
+            return Promise.resolve({
+                stdout: "Proceed anyway? [y/N]",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-panes")) {
+            return Promise.resolve({
+                stdout: JSON.stringify(livePanes),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        return Promise.resolve({ stdout: "", stderr: "", code: 0, killed: false, truncated: false })
+    })
+
+    const prevHost = process.env.ZELLIJ_SESSION_NAME
+    process.env.ZELLIJ_SESSION_NAME = "mock-wait-att"
+    const manager = new ZellijSessionManager(pi)
+    try {
+        manager.bindContext(createMockContext(sessionId))
+        const watcher = new PaneWatcher(pi, manager)
+
+        const paneA = await manager.spawnInTopology({
+            kind: "task",
+            name: "job-att-a",
+            command: ["bash"],
+            cwd: "/tmp",
+            layout: "stacked",
+        })
+        const paneB = await manager.spawnInTopology({
+            kind: "task",
+            name: "job-att-b",
+            command: ["bash"],
+            cwd: "/tmp",
+            layout: "stacked",
+        })
+
+        const res = await watcher.waitForPanes([paneA, paneB], {
+            mode: "all",
+            timeoutMs: 2000,
+        })
+        assert.equal(res.status, "needs_attention")
+        assert.equal(paneA.needsAttention, true)
+        assert.equal(paneB.status, "running")
+        assert.equal(sentMessages.length, 0)
+
+        await watcher.runSingleSync()
+        assert.equal(sentMessages.length, 0)
+
+        watcher.dispose()
+    } finally {
+        if (prevHost !== undefined) process.env.ZELLIJ_SESSION_NAME = prevHost
+        else delete process.env.ZELLIJ_SESSION_NAME
+        manager.cleanupRuntimeDir()
+    }
+})
+
+void test("waitForPanes timeout and abort release suppression for still-running panes", async () => {
+    const sessionId = `wait-release-${Date.now()}`
+    let livePanes: Array<Record<string, unknown>> = [
+        {
+            id: 77,
+            is_plugin: false,
+            is_floating: false,
+            exited: false,
+            tab_id: 1,
+            tab_name: "tasks",
+        },
+        {
+            id: 78,
+            is_plugin: false,
+            is_floating: false,
+            exited: false,
+            tab_id: 1,
+            tab_name: "tasks",
+        },
+    ]
+    const { pi, sentMessages } = createMockRuntime((_cmd, args) => {
+        if (args.includes("list-clients")) {
+            return Promise.resolve({
+                stdout: "CLIENT_ID\n1\n",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-tabs")) {
+            return Promise.resolve({
+                stdout: JSON.stringify([{ position: 0, name: "tasks", active: false, tab_id: 1 }]),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("new-pane")) {
+            const name = args[args.indexOf("-n") + 1] ?? ""
+            return Promise.resolve({
+                stdout: `${name === "job-timeout" ? "terminal_77" : "terminal_78"}\n`,
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-panes")) {
+            return Promise.resolve({
+                stdout: JSON.stringify(livePanes),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        return Promise.resolve({ stdout: "", stderr: "", code: 0, killed: false, truncated: false })
+    })
+
+    const prevHost = process.env.ZELLIJ_SESSION_NAME
+    process.env.ZELLIJ_SESSION_NAME = "mock-wait-release"
+    const manager = new ZellijSessionManager(pi)
+    try {
+        manager.bindContext(createMockContext(sessionId))
+        const watcher = new PaneWatcher(pi, manager)
+
+        const timeoutPane = await manager.spawnInTopology({
+            kind: "task",
+            name: "job-timeout",
+            command: ["bash"],
+            cwd: "/tmp",
+            layout: "stacked",
+        })
+        const abortPane = await manager.spawnInTopology({
+            kind: "task",
+            name: "job-abort",
+            command: ["bash"],
+            cwd: "/tmp",
+            layout: "stacked",
+        })
+
+        const timedOut = await watcher.waitForPanes([timeoutPane], {
+            mode: "all",
+            timeoutMs: 40,
+        })
+        assert.equal(timedOut.status, "timeout")
+        livePanes = livePanes.map((pane) =>
+            pane.id === 77 ? { ...pane, exited: true, exit_status: 0 } : pane,
+        )
+        await watcher.runSingleSync()
+        assert.equal(sentMessages.length, 1)
+        assert.equal((sentMessages[0]?.details as { paneId: string }).paneId, timeoutPane.paneId)
+
+        const controller = new AbortController()
+        const abortPromise = watcher.waitForPanes([abortPane], {
+            mode: "all",
+            timeoutMs: 2000,
+            signal: controller.signal,
+        })
+        await waitForRegisteredWaiters(watcher, abortPane.paneId, 1)
+        controller.abort()
+        const aborted = await abortPromise
+        assert.equal(aborted.status, "aborted")
+        assert.equal(abortPane.status, "running")
+
+        livePanes = livePanes.map((pane) =>
+            pane.id === 78 ? { ...pane, exited: true, exit_status: 1 } : pane,
+        )
+        await watcher.runSingleSync()
+        assert.equal(sentMessages.length, 2)
+        assert.equal((sentMessages[1]?.details as { paneId: string }).paneId, abortPane.paneId)
+
+        watcher.dispose()
+    } finally {
+        if (prevHost !== undefined) process.env.ZELLIJ_SESSION_NAME = prevHost
+        else delete process.env.ZELLIJ_SESSION_NAME
+        manager.cleanupRuntimeDir()
+    }
+})
+
+void test("waitForExit keeps its exit waiter when a prompt is detected during the window", async () => {
+    const sessionId = `wait-exit-att-${Date.now()}`
+    let livePanes: Array<Record<string, unknown>> = [
+        {
+            id: 91,
+            is_plugin: false,
+            is_floating: false,
+            exited: false,
+            tab_id: 1,
+            tab_name: "tasks",
+        },
+    ]
+    const { pi, sentMessages } = createMockRuntime((_cmd, args) => {
+        if (args.includes("list-clients")) {
+            return Promise.resolve({
+                stdout: "CLIENT_ID\n1\n",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-tabs")) {
+            return Promise.resolve({
+                stdout: JSON.stringify([{ position: 0, name: "tasks", active: false, tab_id: 1 }]),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("new-pane")) {
+            return Promise.resolve({
+                stdout: "terminal_91\n",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("dump-screen")) {
+            return Promise.resolve({
+                stdout: "Proceed anyway? [y/N]",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-panes")) {
+            return Promise.resolve({
+                stdout: JSON.stringify(livePanes),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        return Promise.resolve({ stdout: "", stderr: "", code: 0, killed: false, truncated: false })
+    })
+
+    const prevHost = process.env.ZELLIJ_SESSION_NAME
+    process.env.ZELLIJ_SESSION_NAME = "mock-wait-exit-att"
+    const manager = new ZellijSessionManager(pi)
+    try {
+        manager.bindContext(createMockContext(sessionId))
+        const watcher = new PaneWatcher(pi, manager)
+        const pane = await manager.spawnInTopology({
+            kind: "task",
+            name: "job-exit-att",
+            command: ["bash"],
+            cwd: "/tmp",
+            layout: "stacked",
+        })
+
+        const waitPromise = watcher.waitForExit(pane, 1000)
+        await waitForRegisteredWaiters(watcher, pane.paneId, 1)
+
+        livePanes = [
+            {
+                ...livePanes[0],
+                exited: false,
+                attention: { status: "NeedsYou", changed_ms: 1 },
+            },
+        ]
+        await watcher.runSingleSync()
+        assert.equal(pane.needsAttention, true)
+        assert.equal(sentMessages.length, 0)
+
+        livePanes = [{ ...livePanes[0], exited: true, exit_status: 0 }]
+        await watcher.runSingleSync()
+
+        let guardTimer: ReturnType<typeof setTimeout> | undefined
+        const outcome = await Promise.race([
+            waitPromise,
+            new Promise<"guard">((resolve) => {
+                guardTimer = setTimeout(() => resolve("guard"), 300)
+            }),
+        ])
+        if (guardTimer) clearTimeout(guardTimer)
+        assert.notEqual(outcome, "guard")
+        assert.equal((outcome as { exited: boolean }).exited, true)
+        assert.equal(sentMessages.length, 0)
+
+        watcher.dispose()
+    } finally {
+        if (prevHost !== undefined) process.env.ZELLIJ_SESSION_NAME = prevHost
+        else delete process.env.ZELLIJ_SESSION_NAME
+        manager.cleanupRuntimeDir()
+    }
+})
+
+void test("concurrent waitForPanes calls keep suppression until the last waiter releases", async () => {
+    const sessionId = `wait-concurrent-${Date.now()}`
+    let livePanes: Array<Record<string, unknown>> = [
+        {
+            id: 92,
+            is_plugin: false,
+            is_floating: false,
+            exited: false,
+            tab_id: 1,
+            tab_name: "tasks",
+        },
+    ]
+    const { pi, sentMessages } = createMockRuntime((_cmd, args) => {
+        if (args.includes("list-clients")) {
+            return Promise.resolve({
+                stdout: "CLIENT_ID\n1\n",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-tabs")) {
+            return Promise.resolve({
+                stdout: JSON.stringify([{ position: 0, name: "tasks", active: false, tab_id: 1 }]),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("new-pane")) {
+            return Promise.resolve({
+                stdout: "terminal_92\n",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("dump-screen")) {
+            return Promise.resolve({
+                stdout: "Continue? (y/n)",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-panes")) {
+            return Promise.resolve({
+                stdout: JSON.stringify(livePanes),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        return Promise.resolve({ stdout: "", stderr: "", code: 0, killed: false, truncated: false })
+    })
+
+    const prevHost = process.env.ZELLIJ_SESSION_NAME
+    process.env.ZELLIJ_SESSION_NAME = "mock-wait-concurrent"
+    const manager = new ZellijSessionManager(pi)
+    try {
+        manager.bindContext(createMockContext(sessionId))
+        const watcher = new PaneWatcher(pi, manager)
+        const pane = await manager.spawnInTopology({
+            kind: "task",
+            name: "job-concurrent",
+            command: ["bash"],
+            cwd: "/tmp",
+            layout: "stacked",
+        })
+
+        const shortWait = watcher.waitForPanes([pane], { mode: "all", timeoutMs: 40 })
+        const longWait = watcher.waitForPanes([pane], { mode: "all", timeoutMs: 1000 })
+        await waitForRegisteredWaiters(watcher, pane.paneId, 2)
+
+        const shortResult = await shortWait
+        assert.equal(shortResult.status, "timeout")
+
+        livePanes = [
+            {
+                ...livePanes[0],
+                attention: { status: "NeedsYou", changed_ms: 2 },
+            },
+        ]
+        await watcher.runSingleSync()
+        assert.equal(sentMessages.length, 0)
+
+        const longResult = await longWait
+        assert.equal(longResult.status, "needs_attention")
+
+        await watcher.runSingleSync()
+        assert.equal(sentMessages.length, 0)
+
+        watcher.dispose()
+    } finally {
+        if (prevHost !== undefined) process.env.ZELLIJ_SESSION_NAME = prevHost
+        else delete process.env.ZELLIJ_SESSION_NAME
+        manager.cleanupRuntimeDir()
+    }
+})
+
+void test("reset aborts pending waiters and clears suppression", async () => {
+    const sessionId = `wait-reset-${Date.now()}`
+    let livePanes: Array<Record<string, unknown>> = [
+        {
+            id: 93,
+            is_plugin: false,
+            is_floating: false,
+            exited: false,
+            tab_id: 1,
+            tab_name: "tasks",
+        },
+    ]
+    const { pi, sentMessages } = createMockRuntime((_cmd, args) => {
+        if (args.includes("list-clients")) {
+            return Promise.resolve({
+                stdout: "CLIENT_ID\n1\n",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-tabs")) {
+            return Promise.resolve({
+                stdout: JSON.stringify([{ position: 0, name: "tasks", active: false, tab_id: 1 }]),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("new-pane")) {
+            return Promise.resolve({
+                stdout: "terminal_93\n",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-panes")) {
+            return Promise.resolve({
+                stdout: JSON.stringify(livePanes),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        return Promise.resolve({ stdout: "", stderr: "", code: 0, killed: false, truncated: false })
+    })
+
+    const prevHost = process.env.ZELLIJ_SESSION_NAME
+    process.env.ZELLIJ_SESSION_NAME = "mock-wait-reset"
+    const manager = new ZellijSessionManager(pi)
+    try {
+        manager.bindContext(createMockContext(sessionId))
+        const watcher = new PaneWatcher(pi, manager)
+        const pane = await manager.spawnInTopology({
+            kind: "task",
+            name: "job-reset",
+            command: ["bash"],
+            cwd: "/tmp",
+            layout: "stacked",
+        })
+
+        const waitPromise = watcher.waitForPanes([pane], { mode: "all", timeoutMs: 1000 })
+        await waitForRegisteredWaiters(watcher, pane.paneId, 1)
+        watcher.reset()
+
+        let guardTimer: ReturnType<typeof setTimeout> | undefined
+        const outcome = await Promise.race([
+            waitPromise,
+            new Promise<"guard">((resolve) => {
+                guardTimer = setTimeout(() => resolve("guard"), 300)
+            }),
+        ])
+        if (guardTimer) clearTimeout(guardTimer)
+        assert.notEqual(outcome, "guard")
+        assert.equal((outcome as { status: string }).status, "aborted")
+
+        livePanes = [{ ...livePanes[0], exited: true, exit_status: 0 }]
+        await watcher.runSingleSync()
+        assert.equal(sentMessages.length, 1)
+
+        watcher.dispose()
+    } finally {
+        if (prevHost !== undefined) process.env.ZELLIJ_SESSION_NAME = prevHost
+        else delete process.env.ZELLIJ_SESSION_NAME
+        manager.cleanupRuntimeDir()
+    }
+})
+
+void test("waitForPanes deduplicates repeated pane targets without leaking waiters", async () => {
+    const sessionId = `wait-dedup-${Date.now()}`
+    const livePanes: Array<Record<string, unknown>> = [
+        {
+            id: 94,
+            is_plugin: false,
+            is_floating: false,
+            exited: false,
+            tab_id: 1,
+            tab_name: "tasks",
+        },
+    ]
+    const { pi } = createMockRuntime((_cmd, args) => {
+        if (args.includes("list-clients")) {
+            return Promise.resolve({
+                stdout: "CLIENT_ID\n1\n",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-tabs")) {
+            return Promise.resolve({
+                stdout: JSON.stringify([{ position: 0, name: "tasks", active: false, tab_id: 1 }]),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("new-pane")) {
+            return Promise.resolve({
+                stdout: "terminal_94\n",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-panes")) {
+            return Promise.resolve({
+                stdout: JSON.stringify(livePanes),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        return Promise.resolve({ stdout: "", stderr: "", code: 0, killed: false, truncated: false })
+    })
+
+    const prevHost = process.env.ZELLIJ_SESSION_NAME
+    process.env.ZELLIJ_SESSION_NAME = "mock-wait-dedup"
+    const manager = new ZellijSessionManager(pi)
+    try {
+        manager.bindContext(createMockContext(sessionId))
+        const watcher = new PaneWatcher(pi, manager)
+        const pane = await manager.spawnInTopology({
+            kind: "task",
+            name: "job-dedup",
+            command: ["bash"],
+            cwd: "/tmp",
+            layout: "stacked",
+        })
+
+        const res = await watcher.waitForPanes([pane, pane], {
+            mode: "all",
+            timeoutMs: 40,
+        })
+        assert.equal(res.status, "timeout")
+        const internal = watcher as unknown as {
+            exitWaiters: Map<string, Set<unknown>>
+        }
+        assert.equal(internal.exitWaiters.size, 0)
+
+        watcher.dispose()
+    } finally {
+        if (prevHost !== undefined) process.env.ZELLIJ_SESSION_NAME = prevHost
+        else delete process.env.ZELLIJ_SESSION_NAME
+        manager.cleanupRuntimeDir()
+    }
+})
+
+void test("mode any does not duplicate followUp when another pane prompts in the same sync", async () => {
+    const sessionId = `wait-any-att-${Date.now()}`
+    let livePanes: Array<Record<string, unknown>> = [
+        {
+            id: 95,
+            is_plugin: false,
+            is_floating: false,
+            exited: false,
+            tab_id: 1,
+            tab_name: "tasks",
+        },
+        {
+            id: 96,
+            is_plugin: false,
+            is_floating: false,
+            exited: false,
+            tab_id: 1,
+            tab_name: "tasks",
+        },
+    ]
+    const { pi, sentMessages } = createMockRuntime((_cmd, args) => {
+        if (args.includes("list-clients")) {
+            return Promise.resolve({
+                stdout: "CLIENT_ID\n1\n",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-tabs")) {
+            return Promise.resolve({
+                stdout: JSON.stringify([{ position: 0, name: "tasks", active: false, tab_id: 1 }]),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("new-pane")) {
+            const name = args[args.indexOf("-n") + 1] ?? ""
+            return Promise.resolve({
+                stdout: `${name === "job-any-exit" ? "terminal_95" : "terminal_96"}\n`,
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("dump-screen")) {
+            return Promise.resolve({
+                stdout: "Proceed anyway? [y/N]",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-panes")) {
+            return Promise.resolve({
+                stdout: JSON.stringify(livePanes),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        return Promise.resolve({ stdout: "", stderr: "", code: 0, killed: false, truncated: false })
+    })
+
+    const prevHost = process.env.ZELLIJ_SESSION_NAME
+    process.env.ZELLIJ_SESSION_NAME = "mock-wait-any-att"
+    const manager = new ZellijSessionManager(pi)
+    try {
+        manager.bindContext(createMockContext(sessionId))
+        const watcher = new PaneWatcher(pi, manager)
+        const exitPane = await manager.spawnInTopology({
+            kind: "task",
+            name: "job-any-exit",
+            command: ["bash"],
+            cwd: "/tmp",
+            layout: "stacked",
+        })
+        const promptPane = await manager.spawnInTopology({
+            kind: "task",
+            name: "job-any-prompt",
+            command: ["bash"],
+            cwd: "/tmp",
+            layout: "stacked",
+        })
+
+        const waitPromise = watcher.waitForPanes([exitPane, promptPane], {
+            mode: "any",
+            timeoutMs: 1000,
+        })
+        await waitForRegisteredWaiters(watcher, exitPane.paneId, 1)
+        await waitForRegisteredWaiters(watcher, promptPane.paneId, 1)
+
+        livePanes = [
+            { ...livePanes[0], exited: true, exit_status: 0 },
+            {
+                ...livePanes[1],
+                exited: false,
+                attention: { status: "NeedsYou", changed_ms: 3 },
+            },
+        ]
+        await watcher.runSingleSync()
+
+        const res = await waitPromise
+        assert.equal(res.status, "completed")
+        assert.equal(promptPane.needsAttention, true)
+        assert.equal(sentMessages.length, 0)
+
+        await watcher.runSingleSync()
+        assert.equal(sentMessages.length, 0)
+
+        watcher.dispose()
+    } finally {
+        if (prevHost !== undefined) process.env.ZELLIJ_SESSION_NAME = prevHost
+        else delete process.env.ZELLIJ_SESSION_NAME
+        manager.cleanupRuntimeDir()
+    }
+})
+
+void test("closing a tracked pane wakes waitForPanes and keeps its log", async () => {
+    const sessionId = `wait-close-${Date.now()}`
+    const livePanes: Array<Record<string, unknown>> = [
+        {
+            id: 97,
+            is_plugin: false,
+            is_floating: false,
+            exited: false,
+            tab_id: 1,
+            tab_name: "tasks",
+        },
+    ]
+    const { pi } = createMockRuntime((_cmd, args) => {
+        if (args.includes("list-clients")) {
+            return Promise.resolve({
+                stdout: "CLIENT_ID\n1\n",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-tabs")) {
+            return Promise.resolve({
+                stdout: JSON.stringify([{ position: 0, name: "tasks", active: false, tab_id: 1 }]),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("new-pane")) {
+            return Promise.resolve({
+                stdout: "terminal_97\n",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-panes")) {
+            return Promise.resolve({
+                stdout: JSON.stringify(livePanes),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        return Promise.resolve({ stdout: "", stderr: "", code: 0, killed: false, truncated: false })
+    })
+
+    const prevHost = process.env.ZELLIJ_SESSION_NAME
+    process.env.ZELLIJ_SESSION_NAME = "mock-wait-close"
+    const manager = new ZellijSessionManager(pi)
+    try {
+        manager.bindContext(createMockContext(sessionId))
+        const watcher = new PaneWatcher(pi, manager)
+        manager.setPaneFinalizedListener((pane) => watcher.notifyPaneFinalized(pane))
+
+        const art = manager.allocateArtifactPaths("job-close")
+        writeFileSync(art.logPath, "close log output\n", "utf-8")
+        const pane = await manager.spawnInTopology({
+            kind: "task",
+            name: "job-close",
+            command: ["bash"],
+            cwd: "/tmp",
+            layout: "stacked",
+            logPath: art.logPath,
+            exitMarkerPath: art.exitMarkerPath,
+        })
+
+        const waitPromise = watcher.waitForPanes([pane], {
+            mode: "all",
+            timeoutMs: 1000,
+        })
+        await waitForRegisteredWaiters(watcher, pane.paneId, 1)
+
+        await manager.closeTrackedPane(pane.paneId)
+        const res = await waitPromise
+        assert.equal(res.status, "completed")
+        assert.equal(res.panes[0]?.status, "closed")
+        assert.ok(existsSync(art.logPath), "log must stay readable after close during wait")
+        assert.equal(await manager.readPaneOutput(pane, { maxLines: 10 }), "close log output")
+
+        watcher.dispose()
+    } finally {
+        if (prevHost !== undefined) process.env.ZELLIJ_SESSION_NAME = prevHost
+        else delete process.env.ZELLIJ_SESSION_NAME
+        manager.cleanupRuntimeDir()
+    }
+})
+
+void test("releasing suppressed attention persists the cleared signature", async () => {
+    const sessionId = `wait-att-persist-${Date.now()}`
+    const livePanes: Array<Record<string, unknown>> = [
+        {
+            id: 102,
+            is_plugin: false,
+            is_floating: false,
+            exited: false,
+            tab_id: 1,
+            tab_name: "tasks",
+            attention: { status: "NeedsYou", changed_ms: 5 },
+        },
+    ]
+    const { pi, entries } = createMockRuntime((_cmd, args) => {
+        if (args.includes("list-clients")) {
+            return Promise.resolve({
+                stdout: "CLIENT_ID\n1\n",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-tabs")) {
+            return Promise.resolve({
+                stdout: JSON.stringify([{ position: 0, name: "tasks", active: false, tab_id: 1 }]),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("new-pane")) {
+            return Promise.resolve({
+                stdout: "terminal_102\n",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("dump-screen")) {
+            return Promise.resolve({
+                stdout: "Proceed anyway? [y/N]",
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        if (args.includes("list-panes")) {
+            return Promise.resolve({
+                stdout: JSON.stringify(livePanes),
+                stderr: "",
+                code: 0,
+                killed: false,
+                truncated: false,
+            })
+        }
+        return Promise.resolve({ stdout: "", stderr: "", code: 0, killed: false, truncated: false })
+    })
+
+    const prevHost = process.env.ZELLIJ_SESSION_NAME
+    process.env.ZELLIJ_SESSION_NAME = "mock-wait-att-persist"
+    const manager = new ZellijSessionManager(pi)
+    try {
+        manager.bindContext(createMockContext(sessionId))
+        const watcher = new PaneWatcher(pi, manager)
+        const pane = await manager.spawnInTopology({
+            kind: "task",
+            name: "job-att-persist",
+            command: ["bash"],
+            cwd: "/tmp",
+            layout: "stacked",
+        })
+
+        const res = await watcher.waitForExit(pane, 100)
+        assert.equal(res.exited, false)
+        assert.equal(pane.needsAttention, true)
+        assert.equal(pane.lastAttentionSignature, undefined)
+
+        const stateEntries = entries.filter((entry) => entry.customType === "zellij-state")
+        const latest = stateEntries.at(-1)?.data as {
+            panes: Array<{
+                paneId: string
+                needsAttention?: boolean
+                lastAttentionSignature?: string
+            }>
+        }
+        const saved = latest.panes.find((candidate) => candidate.paneId === pane.paneId)
+        assert.ok(saved)
+        assert.equal(saved.needsAttention, true)
+        assert.equal(saved.lastAttentionSignature, undefined)
 
         watcher.dispose()
     } finally {

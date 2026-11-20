@@ -31,16 +31,20 @@ State for tracked panes is saved in the Pi session branch (`zellij-state`) and r
 | Workload                                   | Tool              | Default Structure               | Lifecycle                                                                                              |
 | :----------------------------------------- | :---------------- | :------------------------------ | :----------------------------------------------------------------------------------------------------- |
 | Long task (`build`, `test`, `lint`)        | `zellij_run`      | `tasks` tab, `stacked` panes    | Waits briefly (`8s` default), then runs in background and pushes a `followUp` turn on exit or prompt.  |
+| Background task or one-shot subagent wait  | `zellij_wait`     | Tracked panes, no new pane      | Event-driven `all`/`any` wait; no sleep polling, returns early on input, and `Esc` cancels it.         |
 | Background service (`dev` server, watcher) | `zellij_service`  | `services` tab, `stacked` panes | Optional `readyPattern` wait via `zellij subscribe --format json`; pushes a `followUp` alert on crash. |
 | Subagent (isolated `pi` run)               | `zellij_subagent` | `agents` tab, `stacked` panes   | Supports `one-shot` (`pi -p`) and `rpc` (`pi --mode rpc`) with read-only default tools.                |
 | Interactive terminal or REPL               | `zellij_repl`     | Active tab, `floating` pane     | Opens a floating pane (`10%`, `10%`, `80%`, `80%` by default) for direct user input.                   |
 
 ## Pane Lifecycle, Display, and Inbox
 
-- **Auto-reap and log retention**: After completion handling (`notifiedCompletion === true`), `task` and `agent` panes
-  with `exitCode === 0` and all exited `repl` panes close automatically on `agent_settled` or before spawning a new pane
-  in `spawnInTopology`. Log files remain on disk (`keepLog: true`) until `session_shutdown` (`reason === "quit"`).
-  Failed or remaining exited panes stay tracked up to `MAX_KEPT_EXITED_PANES = 2`.
+- **Auto-reap and log retention**: After completion handling (`notifiedCompletion === true`), every exited pane closes
+  automatically on `agent_settled` or before spawning a new pane in `spawnInTopology`, regardless of kind or exit code.
+  Logs and briefs stay available through the bounded 8-entry recent-pane registry; when an entry is evicted, its log and
+  brief files are deleted. `zellij_pane` `close`/`sweep` and `zellij_service` `stop` also retain finished-pane logs
+  while the pane remains queryable. The runtime directory is removed on `session_shutdown` when `reason === "quit"` and
+  no tracked panes remain. Panes that are not yet notified or whose close fails remain tracked for a later retry; older
+  notified exited panes are pruned beyond `MAX_KEPT_EXITED_PANES = 2` on later passes.
 - **ASCII UI widget and status bar**: The `zellij` status bar and the `zellij-panes` widget above the editor use
   printable ASCII characters only (`0x20` to `0x7E`), such as `[run 12s] task:name | <last output line>`,
   `[input 5s] ...`, and `[err:1 8s] ...`. The `zellij-panes` widget hides automatically when only `exitCode === 0` panes
@@ -54,6 +58,15 @@ State for tracked panes is saved in the Pi session branch (`zellij-state`) and r
 ## Tools and Commands
 
 - `zellij_run`: Run a command in a managed pane (`layout`: `stacked`, `split`, `floating`, or `tab`).
+- `zellij_wait`: Wait for running task and one-shot subagent panes without sleep polling. Call it in a later tool batch
+  after the start calls return `status: running`. `panes` selects explicit pane IDs or names; when omitted, the tool
+  selects all running `task` panes and one-shot `agent` panes, and skips `service`, `repl`, and RPC subagent panes.
+  `mode: "all"` (default) waits for every target and returns early on an input prompt; `mode: "any"` returns after the
+  first exit or prompt. `timeoutSeconds` defaults to `300` (range `1-600`). Results include `completed`,
+  `needs_attention`, `timeout`, `aborted`, or `no_running_panes` plus each pane's status, exit code, log path, and
+  output tail. The wait suppresses duplicate `zellij-event` follow-ups while active, then releases panes that are still
+  running so later exits still notify; `Esc` aborts the wait cleanly. Recently finished panes stay queryable for a
+  bounded number of entries; otherwise read the `logPath` from the earlier completion result.
 - `zellij_service`: Manage persistent services with `start`, `stop`, `status`, and `logs`. Note: `readyPattern` rejects
   nested quantifiers (`(\w+)+` style) with a static heuristic to prevent catastrophic regex backtracking.
 - `zellij_subagent`: Delegate a self-contained prompt to a child `pi` instance.

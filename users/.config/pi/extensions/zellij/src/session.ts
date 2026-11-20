@@ -44,10 +44,12 @@ import {
     isPaneKind,
     isPaneStatus,
     isRecord,
+    isSubagentMode,
     type LayoutMode,
     type PaneKind,
     type PersistedZellijState,
     type SplitDirection,
+    type SubagentMode,
     type TrackedPane,
     type ZellijPaneJson,
 } from "./types.ts"
@@ -58,6 +60,7 @@ const MAX_FULL_READ_BYTES = 2 * 1024 * 1024
 const MAX_TAIL_OUTPUT_CHARS = 48 * 1024
 const MAX_FULL_OUTPUT_CHARS = 128 * 1024
 const MAX_KEPT_EXITED_PANES = 2
+const MAX_RECENT_FINISHED_PANES = 8
 /* eslint-disable no-control-regex */
 const ANSI_ESCAPE_RE =
     /\x1B(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1B]*(?:\x07|\x1B\\)|[PX^_][^\x07\x1B]*(?:\x07|\x1B\\)|[@-Z\\-_])/g
@@ -90,7 +93,14 @@ export interface SpawnOptions {
     briefPath?: string
     exitMarkerPath?: string
     modelLabel?: string
+    subagentMode?: SubagentMode
 }
+
+/**
+ * Called when a tracked pane is finalized. Return true when a live waiter consumed the close,
+ * so the pane's log must be kept for the wait result.
+ */
+export type PaneFinalizedListener = (pane: TrackedPane) => boolean
 
 function defaultSessionNameForContext(ctx: ExtensionContext): string {
     const dirSlug = sanitizeIdentifier(basename(ctx.cwd) || "work", "work", 24)
@@ -285,6 +295,11 @@ export function parsePersistedState(data: unknown): PersistedZellijState | null 
             exitMarkerPath:
                 typeof item.exitMarkerPath === "string" ? item.exitMarkerPath : undefined,
             modelLabel: typeof item.modelLabel === "string" ? item.modelLabel : undefined,
+            subagentMode: isSubagentMode(item.subagentMode)
+                ? item.subagentMode
+                : item.kind === "agent"
+                  ? "one-shot"
+                  : undefined,
             startedAt: item.startedAt,
             endedAt: typeof item.endedAt === "number" ? item.endedAt : undefined,
             status: item.status,
@@ -325,6 +340,8 @@ export class ZellijSessionManager {
     private managedSession = false
     private sessionReady = false
     private panes = new Map<string, TrackedPane>()
+    private recentFinishedPanes = new Map<string, TrackedPane>()
+    private onPaneFinalized: PaneFinalizedListener | undefined
     private runtimeDir = ""
     private exitsDir = ""
     private artifactSeq = 0
@@ -341,6 +358,7 @@ export class ZellijSessionManager {
         this.ctx = ctx
         this.shuttingDown = false
         this.closingPaneIds.clear()
+        this.recentFinishedPanes.clear()
         const envSession = process.env.ZELLIJ_SESSION_NAME?.trim()
         if (envSession) {
             this.sessionName = envSession
@@ -418,6 +436,36 @@ export class ZellijSessionManager {
             }
         }
         return latestRunning ?? latestExited
+    }
+
+    /** Look up a recently finished pane that was already closed or reaped. */
+    getRecentlyFinishedPane(paneIdOrName: string): TrackedPane | undefined {
+        const direct =
+            this.recentFinishedPanes.get(paneIdOrName) ??
+            this.recentFinishedPanes.get(formatPaneId(paneIdOrName))
+        if (direct) return direct
+
+        const sanitized = sanitizeIdentifier(paneIdOrName, paneIdOrName, 48)
+        let latest: TrackedPane | undefined
+        for (const pane of this.recentFinishedPanes.values()) {
+            if (pane.name !== paneIdOrName && pane.name !== sanitized) continue
+            if (
+                !latest ||
+                (pane.endedAt ?? pane.startedAt) > (latest.endedAt ?? latest.startedAt)
+            ) {
+                latest = pane
+            }
+        }
+        return latest
+    }
+
+    /**
+     * Register the single listener that wakes waiters when a pane is finalized.
+     * The listener returns true when a live waiter consumed the close and the log must be kept.
+     * Replaces any previously registered listener.
+     */
+    setPaneFinalizedListener(listener: PaneFinalizedListener): void {
+        this.onPaneFinalized = listener
     }
 
     allocateArtifactPaths(name: string): ArtifactPaths {
@@ -614,6 +662,24 @@ export class ZellijSessionManager {
         }
     }
 
+    private rememberFinishedPane(pane: TrackedPane): void {
+        const snapshot: TrackedPane = {
+            ...pane,
+            status: "exited",
+            endedAt: pane.endedAt ?? Date.now(),
+        }
+        this.recentFinishedPanes.delete(snapshot.paneId)
+        this.recentFinishedPanes.set(snapshot.paneId, snapshot)
+        while (this.recentFinishedPanes.size > MAX_RECENT_FINISHED_PANES) {
+            const oldest = this.recentFinishedPanes.keys().next().value
+            if (oldest === undefined) break
+            const evicted = this.recentFinishedPanes.get(oldest)
+            this.recentFinishedPanes.delete(oldest)
+            if (evicted?.logPath) rmSync(evicted.logPath, { force: true })
+            if (evicted?.briefPath) rmSync(evicted.briefPath, { force: true })
+        }
+    }
+
     private finalizeClosedPane(
         pane: TrackedPane,
         opts?: {
@@ -623,12 +689,16 @@ export class ZellijSessionManager {
             keepClient?: boolean
         },
     ): void {
+        const hadFinished = pane.status === "exited" || typeof pane.exitCode === "number"
         pane.status = "closed"
         pane.endedAt = pane.endedAt ?? Date.now()
+        // A true listener result means a live waiter consumed this close and needs the log.
+        const waiterHandled = this.onPaneFinalized?.(pane) ?? false
+        if (hadFinished) this.rememberFinishedPane(pane)
         this.closingPaneIds.delete(pane.paneId)
         this.panes.delete(pane.paneId)
         removeArtifacts(pane, {
-            keepLog: opts?.keepLog,
+            keepLog: opts?.keepLog || waiterHandled || hadFinished,
             keepBrief: opts?.keepBrief,
         })
         if (!opts?.skipPersist) {
@@ -702,11 +772,7 @@ export class ZellijSessionManager {
         keepClient?: boolean
     }): Promise<TrackedPane[]> {
         const candidates = Array.from(this.panes.values()).filter(
-            (p) =>
-                p.status === "exited" &&
-                p.notifiedCompletion &&
-                (((p.kind === "task" || p.kind === "agent") && p.exitCode === 0) ||
-                    p.kind === "repl"),
+            (p) => p.status === "exited" && p.notifiedCompletion,
         )
 
         const closed: TrackedPane[] = []
@@ -733,6 +799,7 @@ export class ZellijSessionManager {
     }
 
     cleanupRuntimeDir(): void {
+        this.recentFinishedPanes.clear()
         if (this.runtimeDir && existsSync(this.runtimeDir)) {
             rmSync(this.runtimeDir, { recursive: true, force: true })
         }
@@ -855,6 +922,7 @@ export class ZellijSessionManager {
             briefPath: opts.briefPath,
             exitMarkerPath: opts.exitMarkerPath,
             modelLabel: opts.modelLabel,
+            subagentMode: opts.subagentMode,
             startedAt: Date.now(),
             status: "running",
         }

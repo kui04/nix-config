@@ -6,6 +6,8 @@ export type SplitDirection = "right" | "down"
 
 export type PaneStatus = "running" | "exited" | "closed"
 
+export type SubagentMode = "one-shot" | "rpc"
+
 export interface TrackedPane {
     paneId: string
     numericId: number
@@ -20,6 +22,7 @@ export interface TrackedPane {
     briefPath?: string
     exitMarkerPath?: string
     modelLabel?: string
+    subagentMode?: SubagentMode
     startedAt: number
     endedAt?: number
     status: PaneStatus
@@ -89,6 +92,7 @@ export interface ZellijEventDetails {
 const VALID_PANE_KINDS = new Set<string>(["task", "service", "agent", "repl"])
 const VALID_LAYOUT_MODES = new Set<string>(["stacked", "split", "floating", "tab"])
 const VALID_PANE_STATUSES = new Set<string>(["running", "exited", "closed"])
+const VALID_SUBAGENT_MODES = new Set<string>(["one-shot", "rpc"])
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -104,6 +108,10 @@ export function isLayoutMode(value: unknown): value is LayoutMode {
 
 export function isPaneStatus(value: unknown): value is PaneStatus {
     return typeof value === "string" && VALID_PANE_STATUSES.has(value)
+}
+
+export function isSubagentMode(value: unknown): value is SubagentMode {
+    return typeof value === "string" && VALID_SUBAGENT_MODES.has(value)
 }
 
 function asString(value: unknown, fallback = ""): string {

@@ -99,8 +99,24 @@ function formatPaneWidgetParts(pane: TrackedPane): {
     return { badgePlain, badgeColor, safeKind, safeName, headPlain, metaPlain }
 }
 
+export type PaneWaitStatus = "completed" | "needs_attention" | "timeout" | "aborted"
+
+export interface WaitForPanesOptions {
+    mode?: "all" | "any"
+    timeoutMs: number
+    signal?: AbortSignal
+}
+
+export interface WaitForPanesResult {
+    status: PaneWaitStatus
+    panes: TrackedPane[]
+}
+
+type PaneWaitReason = "exited" | "needs_attention" | "aborted"
+
 interface WaitEntry {
-    resolve: (exited: boolean) => void
+    /** Return true when this waiter no longer needs further wakeups and can be removed. */
+    resolve: (reason: PaneWaitReason) => boolean
 }
 
 /**
@@ -118,11 +134,13 @@ export class PaneWatcher {
     private closedSubRetries = 0
     private closedSubRetryTimer: ReturnType<typeof setTimeout> | undefined
     private inFlightSync: Promise<void> | undefined
+    private syncDepth = 0
+    private syncIdleWaiters: Array<() => void> = []
     private syncQueued = false
     private disposed = false
     private generation = 0
     private consecutiveSyncErrors = 0
-    private suppressedNotifyPanes = new Set<string>()
+    private suppressedNotifyPanes = new Map<string, number>()
     private markSeenInFlight = new Set<string>()
     private exitWaiters = new Map<string, Set<WaitEntry>>()
     private activeSubscribers = new Set<ChildProcess>()
@@ -141,9 +159,32 @@ export class PaneWatcher {
         this.closedSubRetries = 0
         this.inFlightSync = undefined
         this.syncQueued = false
+        for (const paneId of Array.from(this.exitWaiters.keys())) {
+            this.resolveWaiters(paneId, "aborted")
+        }
+        this.exitWaiters.clear()
+        this.suppressedNotifyPanes.clear()
         this.markSeenInFlight.clear()
         this.lastStatusText = null
         this.lastPlainWidgetKey = null
+    }
+
+    private suppressPaneNotify(paneId: string): void {
+        this.suppressedNotifyPanes.set(paneId, (this.suppressedNotifyPanes.get(paneId) ?? 0) + 1)
+    }
+
+    private releasePaneNotify(paneId: string): void {
+        const count = this.suppressedNotifyPanes.get(paneId)
+        if (count === undefined) return
+        if (count <= 1) {
+            this.suppressedNotifyPanes.delete(paneId)
+        } else {
+            this.suppressedNotifyPanes.set(paneId, count - 1)
+        }
+    }
+
+    private isPaneNotifySuppressed(paneId: string): boolean {
+        return this.suppressedNotifyPanes.has(paneId)
     }
 
     ensureLoopRunning(): void {
@@ -333,13 +374,14 @@ export class PaneWatcher {
         }
         this.activeSubscribers.clear()
         this.suppressedNotifyPanes.clear()
+        const idleWaiters = this.syncIdleWaiters
+        this.syncIdleWaiters = []
+        for (const resolve of idleWaiters) resolve()
         this.markSeenInFlight.clear()
         this.lastStatusText = null
         this.lastPlainWidgetKey = null
-        for (const set of this.exitWaiters.values()) {
-            for (const entry of set) {
-                entry.resolve(false)
-            }
+        for (const paneId of Array.from(this.exitWaiters.keys())) {
+            this.resolveWaiters(paneId, "aborted")
         }
         this.exitWaiters.clear()
         this.manager.releaseSessionClient()
@@ -522,10 +564,21 @@ export class PaneWatcher {
         return syncPromise
     }
 
+    private async waitForSyncIdle(): Promise<void> {
+        if (this.disposed) return
+        if (this.syncDepth > 0) {
+            await new Promise<void>((resolve) => this.syncIdleWaiters.push(resolve))
+        }
+        if (this.disposed) return
+        const inFlight = this.inFlightSync
+        if (inFlight) await inFlight.catch(() => {})
+    }
+
     /** Reconcile tracked pane state with live Zellij panes. Accessible directly for testing. */
     async runSingleSync(): Promise<void> {
         if (this.disposed || !this.manager.isSessionReady()) return
         const gen = this.generation
+        this.syncDepth += 1
         try {
             const tracked = this.manager.getTrackedPanes()
             if (tracked.length === 0) {
@@ -551,12 +604,12 @@ export class PaneWatcher {
                             const wasRunning = pane.status === "running"
                             pane.status = "closed"
                             pane.endedAt = pane.endedAt ?? Date.now()
-                            this.resolveWaiters(pane.paneId, true)
+                            this.resolveWaiters(pane.paneId, "exited")
                             const shouldNotify =
                                 wasRunning &&
                                 pane.kind !== "repl" &&
                                 !pane.notifiedCompletion &&
-                                !this.suppressedNotifyPanes.has(pane.paneId)
+                                !this.isPaneNotifySuppressed(pane.paneId)
                             if (shouldNotify) {
                                 pane.notifiedCompletion = true
                                 const tail = await this.manager
@@ -610,12 +663,12 @@ export class PaneWatcher {
                     pane.status = "closed"
                     pane.endedAt = pane.endedAt ?? Date.now()
                     const hasWaiter = (this.exitWaiters.get(pane.paneId)?.size ?? 0) > 0
-                    this.resolveWaiters(pane.paneId, true)
+                    this.resolveWaiters(pane.paneId, "exited")
                     const shouldNotify =
                         wasRunning &&
                         pane.kind !== "repl" &&
                         !pane.notifiedCompletion &&
-                        !this.suppressedNotifyPanes.has(pane.paneId)
+                        !this.isPaneNotifySuppressed(pane.paneId)
                     if (shouldNotify) {
                         pane.notifiedCompletion = true
                         const eventType: ZellijEventDetails["eventType"] =
@@ -627,7 +680,7 @@ export class PaneWatcher {
                         this.emitFollowUp(pane, eventType, markerExit, tail)
                     }
                     const keepArtifacts =
-                        shouldNotify || hasWaiter || this.suppressedNotifyPanes.has(pane.paneId)
+                        shouldNotify || hasWaiter || this.isPaneNotifySuppressed(pane.paneId)
                     // Keep log/brief paths when emitting a followUp or while a wait is active.
                     this.manager.removePane(pane.paneId, {
                         keepLog: keepArtifacts,
@@ -648,7 +701,7 @@ export class PaneWatcher {
                     pane.lastOutputLine =
                         this.manager.readLastOutputLine(pane) ?? pane.lastOutputLine
                     dirtyPersist = true
-                    this.resolveWaiters(pane.paneId, true)
+                    this.resolveWaiters(pane.paneId, "exited")
                     this.markPaneSeenOnCleanExit(pane)
 
                     if (pane.kind === "repl") {
@@ -656,7 +709,7 @@ export class PaneWatcher {
                         continue
                     }
 
-                    if (!pane.notifiedCompletion && !this.suppressedNotifyPanes.has(pane.paneId)) {
+                    if (!pane.notifiedCompletion && !this.isPaneNotifySuppressed(pane.paneId)) {
                         pane.notifiedCompletion = true
                         const tail = await this.manager
                             .readPaneOutput(pane, { maxLines: 80 })
@@ -689,6 +742,13 @@ export class PaneWatcher {
             this.ensureLoopRunning()
         } catch {
             // Transient CLI or UI query failure should not crash the extension.
+        } finally {
+            this.syncDepth -= 1
+            if (this.syncDepth === 0) {
+                const waiters = this.syncIdleWaiters
+                this.syncIdleWaiters = []
+                for (const resolve of waiters) resolve()
+            }
         }
     }
 
@@ -697,7 +757,7 @@ export class PaneWatcher {
         live: ZellijPaneJson,
         gen = this.generation,
     ): Promise<boolean> {
-        if (this.suppressedNotifyPanes.has(pane.paneId) || this.disposed) return false
+        if (this.disposed) return false
 
         const attStatus = live.attention?.status ?? "Idle"
         const isWatchQuiet =
@@ -751,13 +811,16 @@ export class PaneWatcher {
             pane.lastOutputLine = lastPromptLine
         }
 
-        this.emitFollowUp(pane, "needs_attention", null, tail)
+        if (!this.isPaneNotifySuppressed(pane.paneId)) {
+            this.emitFollowUp(pane, "needs_attention", null, tail)
+        }
         void promptNotify(
             this.pi,
             this.manager.getSessionName(),
             `${pane.kind}:${pane.name} (${pane.paneId}) is waiting for input.`,
             { title: "Pi Zellij", timeout: "8s", at: "top-right", paneId: pane.paneId },
         ).catch(() => {})
+        this.resolveWaiters(pane.paneId, "needs_attention")
         return true
     }
 
@@ -808,13 +871,21 @@ export class PaneWatcher {
         )
     }
 
-    private resolveWaiters(paneId: string, exited: boolean): void {
+    /** Wake waiters when a tracked pane is finalized by the manager. Returns whether a waiter existed. */
+    notifyPaneFinalized(pane: TrackedPane): boolean {
+        const set = this.exitWaiters.get(pane.paneId)
+        const hadWaiter = (set?.size ?? 0) > 0
+        if (hadWaiter) this.resolveWaiters(pane.paneId, "exited")
+        return hadWaiter
+    }
+
+    private resolveWaiters(paneId: string, reason: PaneWaitReason): void {
         const set = this.exitWaiters.get(paneId)
         if (!set) return
-        this.exitWaiters.delete(paneId)
-        for (const waiter of set) {
-            waiter.resolve(exited)
+        for (const waiter of Array.from(set)) {
+            if (waiter.resolve(reason)) set.delete(waiter)
         }
+        if (set.size === 0) this.exitWaiters.delete(paneId)
     }
 
     private markPaneSeenOnCleanExit(pane: TrackedPane): void {
@@ -847,6 +918,23 @@ export class PaneWatcher {
         }
     }
 
+    private releaseWaitSuppression(pane: TrackedPane, attentionReported: boolean): void {
+        const wasSuppressed = this.isPaneNotifySuppressed(pane.paneId)
+        this.releasePaneNotify(pane.paneId)
+        const stillSuppressed = this.isPaneNotifySuppressed(pane.paneId)
+        if (
+            wasSuppressed &&
+            !stillSuppressed &&
+            !attentionReported &&
+            pane.status === "running" &&
+            pane.needsAttention
+        ) {
+            // A prompt detected during a wait that did not report it must notify on the next sync.
+            pane.lastAttentionSignature = undefined
+            this.manager.markPaneUpdated()
+        }
+    }
+
     /**
      * Wait up to `timeoutMs` for a pane to exit while suppressing duplicate
      * background followUp notifications during the synchronous wait window.
@@ -862,7 +950,7 @@ export class PaneWatcher {
         }
 
         const gen = this.generation
-        this.suppressedNotifyPanes.add(pane.paneId)
+        this.suppressPaneNotify(pane.paneId)
         try {
             await this.syncNow()
             if (
@@ -893,7 +981,11 @@ export class PaneWatcher {
                 }
 
                 const entry: WaitEntry = {
-                    resolve: (didExit) => finish(didExit),
+                    resolve: (reason) => {
+                        if (reason === "needs_attention") return false
+                        finish(reason === "exited")
+                        return true
+                    },
                 }
 
                 const onAbort = () => finish(false)
@@ -916,7 +1008,149 @@ export class PaneWatcher {
             }
             return { exited: false, pane }
         } finally {
-            this.suppressedNotifyPanes.delete(pane.paneId)
+            this.releaseWaitSuppression(pane, false)
+        }
+    }
+
+    /**
+     * Wait for multiple panes to exit or request input. Wakes on the exit watcher and
+     * reconciliation loop without an extra polling timer; suppressed panes do not emit
+     * duplicate `followUp` messages while this wait is active.
+     */
+    async waitForPanes(
+        panes: readonly TrackedPane[],
+        opts: WaitForPanesOptions,
+    ): Promise<WaitForPanesResult> {
+        const mode = opts.mode ?? "all"
+        const targets = Array.from(
+            new Map<string, TrackedPane>(panes.map((pane) => [pane.paneId, pane])).values(),
+        )
+        const result = (status: PaneWaitStatus): WaitForPanesResult => ({ status, panes: targets })
+
+        if (targets.length === 0) return result("completed")
+
+        this.ensureLoopRunning()
+        const gen = this.generation
+        for (const pane of targets) {
+            if (pane.status === "running") this.suppressPaneNotify(pane.paneId)
+        }
+
+        let finalStatus: PaneWaitStatus = opts.signal?.aborted ? "aborted" : "timeout"
+        let settledByWaiter = false
+        try {
+            if (this.disposed || gen !== this.generation) {
+                finalStatus = "aborted"
+                return result(finalStatus)
+            }
+            if (opts.signal?.aborted) return result(finalStatus)
+
+            await this.syncNow()
+            if (this.disposed || gen !== this.generation) {
+                finalStatus = "aborted"
+                return result(finalStatus)
+            }
+            if (opts.signal?.aborted) {
+                finalStatus = "aborted"
+                return result(finalStatus)
+            }
+
+            const evaluate = (): PaneWaitStatus | null => {
+                if (this.disposed || gen !== this.generation) return "aborted"
+                if (targets.some((p) => p.status === "running" && p.needsAttention)) {
+                    return "needs_attention"
+                }
+                const running = targets.filter((p) => p.status === "running").length
+                if (mode === "any") {
+                    return running < targets.length ? "completed" : null
+                }
+                return running === 0 ? "completed" : null
+            }
+
+            const initial = evaluate()
+            if (initial) {
+                finalStatus = initial
+                return result(finalStatus)
+            }
+            if (opts.timeoutMs <= 0) {
+                finalStatus = "timeout"
+                return result(finalStatus)
+            }
+
+            finalStatus = await new Promise<PaneWaitStatus>((done) => {
+                let settled = false
+                const timers: { timeout?: ReturnType<typeof setTimeout> } = {}
+                const entries = new Map<string, WaitEntry>()
+
+                const onAbort = () => {
+                    finish("aborted")
+                }
+
+                const finish = (status: PaneWaitStatus): void => {
+                    if (settled) return
+                    settled = true
+                    if (timers.timeout) clearTimeout(timers.timeout)
+                    opts.signal?.removeEventListener("abort", onAbort)
+                    for (const [paneId, entry] of entries) {
+                        const set = this.exitWaiters.get(paneId)
+                        if (!set) continue
+                        set.delete(entry)
+                        if (set.size === 0) this.exitWaiters.delete(paneId)
+                    }
+                    entries.clear()
+                    done(status)
+                }
+
+                for (const pane of targets) {
+                    if (pane.status !== "running") continue
+                    const set = this.exitWaiters.get(pane.paneId) ?? new Set<WaitEntry>()
+                    const entry: WaitEntry = {
+                        resolve: (reason) => {
+                            if (this.disposed || gen !== this.generation || reason === "aborted") {
+                                finish("aborted")
+                                return true
+                            }
+                            if (reason === "needs_attention") {
+                                settledByWaiter = true
+                                finish("needs_attention")
+                                return true
+                            }
+                            const status = evaluate()
+                            if (status) {
+                                settledByWaiter = true
+                                finish(status)
+                            }
+                            return true
+                        },
+                    }
+                    set.add(entry)
+                    entries.set(pane.paneId, entry)
+                    this.exitWaiters.set(pane.paneId, set)
+                }
+
+                const afterRegister = evaluate()
+                if (afterRegister) {
+                    finish(afterRegister)
+                    return
+                }
+
+                opts.signal?.addEventListener("abort", onAbort, { once: true })
+                timers.timeout = setTimeout(() => finish("timeout"), opts.timeoutMs)
+                timers.timeout.unref?.()
+            })
+
+            return result(finalStatus)
+        } finally {
+            if (settledByWaiter) {
+                // Let an in-flight sync finish detecting prompts before suppression is released.
+                await this.waitForSyncIdle()
+            }
+            for (const pane of targets) {
+                if (!this.disposed && gen === this.generation && pane.status === "exited") {
+                    this.markExitedPaneHandled(pane)
+                }
+                // A prompt included in the wait result must not produce a second followUp.
+                this.releaseWaitSuppression(pane, pane.needsAttention === true)
+            }
         }
     }
 
