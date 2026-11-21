@@ -1,16 +1,10 @@
 ---
 name: tydd
 description: >-
-  Guides Type-Driven Development (TyDD) across any programming language, turning types into executable specifications,
-  compile-time proofs, and the contract between human and AI. Applies foundational principles — Type-Define-Refine,
-  making illegal states unrepresentable, parse don't validate, algebraic data types, typestate machines, totality, and
-  eliminating boolean blindness — while preventing over-typing and forbidding silent type-checker workarounds. Use
-  whenever designing a new feature, domain model, state machine, protocol, or public API; refactoring loosely typed or
-  defensively coded logic; tightening schemas or boundary parsing; removing `any`/casts/null-check sprawl; or reviewing
-  type architecture — even if the user never says "TyDD" or "type-driven" (e.g. "design the data model", "make invalid
-  states impossible", "define the interfaces first", "model this workflow", "clean up these flags and null checks").
-  Works in statically and gradually typed languages (Rust, TypeScript, Python, Go, Java, Kotlin, Swift, C#, Haskell,
-  OCaml, F#, Scala, and more). Not for purely visual styling, prose editing, or tasks with no code or schema surface.
+  Guides Type-Driven Development (TyDD) in any language: design domain types, state machines, boundary parsers, and API
+  signatures before implementation so illegal states cannot compile. Use when modeling data or workflows, parsing
+  untrusted inputs, refactoring primitive obsession, boolean flags, `any`, casts, or null checks, or auditing type
+  safety — even if the user never says "TyDD". Not for prose, visual styling, or tasks without code or schemas.
 ---
 
 # TyDD — Type-Driven Development
