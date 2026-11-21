@@ -60,6 +60,7 @@ in
 
   # pi-specific configuration
   home.file.".pi/agent/extensions".source = "${config}/extensions";
+  home.file.".pi/agent/prompts".source = "${config}/prompts";
   home.file.".pi/agent/npm/.npmrc".source = "${config}/.npmrc";
   home.file."Templates/pi-mcp.json".source = "${config}/mcp-template.json";
 
