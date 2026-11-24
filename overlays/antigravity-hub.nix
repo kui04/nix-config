@@ -4,17 +4,17 @@
 # replaces the source; the rest of the nixpkgs recipe is reused unchanged.
 final: prev:
 let
-  version = "2.34.0";
-  buildId = "5887025308631040";
+  version = "2.35.0";
+  buildId = "6394266482769920";
 
   sources = {
     x86_64-linux = {
       platform = "linux-x64";
-      hash = "sha256-R4xo+Gye9hpQIYWjnpzuxmsSdqalOxkaGbDZzoaYNts=";
+      hash = "sha256-uIcZy9X0CMASHud9KXQBGidIMGslkdNG60iKILxR7Ck=";
     };
     aarch64-linux = {
       platform = "linux-arm";
-      hash = "sha256-kfMc5Qx5XgVx55IlERGf8+evwu5PZAqX1p260gY8GGY=";
+      hash = "sha256-pvXCEPbGswr3HC4w7sAoUX53gB76y6ZxevuFgLm5DQs=";
     };
   };
 
