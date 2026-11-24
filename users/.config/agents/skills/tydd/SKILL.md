@@ -120,7 +120,7 @@ Once the user approves the type contract:
    - Which behavioral or dynamic invariants remain outside the type system and should be verified by unit,
      property-based, or integration tests (e.g., arithmetic formulas, ordering rules, parser round-trips
      `parse(format(x)) == Ok(x)`, cross-record uniqueness, concurrency, and persistence — natural handoff to testing /
-     `test-engineer`).
+     `tdd`).
 
 ## When the type checker fails: diagnose before weakening a type
 
