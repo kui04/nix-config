@@ -127,8 +127,8 @@ generic encodings hurts readability; instead, maximize what Go _does_ enforce an
    invariant-bearing types, use an unexported inner field (`type Email struct { value string }`) with
    `ParseEmail(s string) (Email, error)` and a `String() string` accessor.
    - **Zero-value hazard in Go**: Every struct in Go has an accessible zero value (`Email{}`). Either make the zero
-     value useful/safe (Go proverb), check `IsZero()` at boundaries, or return a pointer/opaque handle from a package
-     that owns all transitions. Explicitly document zero-value safety in Step 4!
+     value useful/safe, check `IsZero()` at boundaries, or return a pointer/opaque handle from a package that owns all
+     transitions. Explicitly document zero-value safety in Step 4!
 2. **Closed sum types via unexported marker method**:
    ```go
    type PaymentEvent interface {
