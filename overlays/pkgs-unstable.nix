@@ -7,6 +7,8 @@
     overlays = [
       (import ./hmcl.nix)
       (import ./antigravity-hub.nix)
+      (import ./zellij.nix)
+      (import ./zellij-mcp.nix)
     ];
   };
 }

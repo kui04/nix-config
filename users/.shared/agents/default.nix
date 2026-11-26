@@ -18,6 +18,7 @@ in
     ripgrep
     unstable.codegraph
     unstable.rtk
+    unstable.zellij-mcp-server
   ];
 
   # global canonical agent directory links
